@@ -31,7 +31,7 @@ describe('multiple peerconnections', () => {
   it('establishes multiple connections and hangs up', async () => {
     // Some selenium environments never reach `readyState=complete` for file:// pages.
     // Instead wait for the elements we need + the script-initialized flag.
-    await driver.wait(() => driver.findElement(webdriver.By.id('startButton')));
+    await driver.wait(webdriver.until.elementLocated(webdriver.By.id('startButton')));
     await driver.wait(() => driver.executeScript(() => typeof window.multiplePageLoaded !== 'undefined'));
     await driver.wait(() => driver.executeScript(() => window.multiplePageLoaded === true));
 
