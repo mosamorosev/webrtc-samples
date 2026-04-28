@@ -26,14 +26,11 @@ const video1 = document.querySelector('video#video1');
 let preferredVideoCodecMimeType;
 
 let localStream;
-// peerPairs holds at most one entry: [{senderPc, receiverPc}].
-// One senderPc encodes the local stream via N video transceivers;
-// one receiverPc decodes all N incoming streams.
-let peerPairs = [];
+// One shared sender PC encodes the local stream; each view has its own receiver PC.
+let senderPc;
+let receiverPcs = [];
 let remoteVideos = [];
-let codecLabels = [];
 let connectionStates = [];
-let statsIntervalId = null;
 
 const supportsSetCodecPreferences = window.RTCRtpTransceiver &&
   'setCodecPreferences' in window.RTCRtpTransceiver.prototype;
@@ -140,153 +137,79 @@ async function call() {
   connectionStates = new Array(receiveVideoCount).fill('new');
   updateStatus();
 
-  // One senderPc encodes the local stream; one receiverPc decodes all N streams.
-  const senderPc = new RTCPeerConnection();
-  const receiverPc = new RTCPeerConnection();
-
-  senderPc.onicecandidate = e => {
-    if (e.candidate) {
-      receiverPc.addIceCandidate(e.candidate).catch(err => {
-        console.warn('receiverPc.addIceCandidate failed', err);
-      });
-    }
-  };
-  receiverPc.onicecandidate = e => {
-    if (e.candidate) {
-      senderPc.addIceCandidate(e.candidate).catch(err => {
-        console.warn('senderPc.addIceCandidate failed', err);
-      });
-    }
-  };
-
-  receiverPc.onconnectionstatechange = () => {
-    const state = receiverPc.connectionState;
-    connectionStates = new Array(receiveVideoCount).fill(state);
-    console.log(`connection state: ${state}`);
-    updateStatus();
-  };
+  senderPc = new RTCPeerConnection();
+  receiverPcs = new Array(receiveVideoCount).fill(null).map(() => new RTCPeerConnection());
 
   const videoTrack = videoTracks[0];
   const audioTrack = audioTracks[0];
 
-  // Add N (video + audio) transceiver pairs to senderPc — one pair per receive view.
-  // Each pair shares a distinct MediaStream so the receiver delivers them independently.
-  const videoTransceivers = [];
+  // Build N independent calls:
+  // - One shared senderPc holds N transceivers (one video + optional audio per view).
+  // - Each receiverPc negotiates with senderPc only for its own transceivers.
   for (let i = 0; i < receiveVideoCount; i++) {
-    const stream = new MediaStream(
-        [videoTrack, audioTrack].filter(Boolean));
+    const receiverPc = receiverPcs[i];
+
+    senderPc.onicecandidate = e => {
+      if (!e.candidate) return;
+      receiverPcs.forEach((pc, idx) => {
+        pc.addIceCandidate(e.candidate).catch(err => {
+          console.warn(`receiverPc[${idx}].addIceCandidate failed`, err);
+        });
+      });
+    };
+    receiverPc.onicecandidate = e => {
+      if (e.candidate) {
+        senderPc.addIceCandidate(e.candidate).catch(err => {
+          console.warn('senderPc.addIceCandidate failed', err);
+        });
+      }
+    };
+    receiverPc.onconnectionstatechange = () => {
+      connectionStates[i] = receiverPc.connectionState;
+      updateStatus();
+    };
+
+    const stream = new MediaStream([videoTrack, audioTrack].filter(Boolean));
     const videoTransceiver = senderPc.addTransceiver(videoTrack, {
       direction: 'sendonly',
       streams: [stream]
     });
-    videoTransceivers.push(videoTransceiver);
+    applyCodecPreferences(videoTransceiver, i + 1);
     if (audioTrack) {
       senderPc.addTransceiver(audioTrack, {
         direction: 'sendonly',
         streams: [stream]
       });
     }
+
+    receiverPc.ontrack = e => {
+      if (e.track.kind !== 'video') return;
+      const incomingStream = e.streams[0] || new MediaStream([e.track]);
+      if (remoteVideos[i] && remoteVideos[i].srcObject !== incomingStream) {
+        remoteVideos[i].srcObject = incomingStream;
+        console.log(`video${i + 1}: received remote stream`);
+      }
+    };
+
+    const offer = await senderPc.createOffer();
+    await senderPc.setLocalDescription(offer);
+    await receiverPc.setRemoteDescription(offer);
+    const answer = await receiverPc.createAnswer();
+    await receiverPc.setLocalDescription(answer);
+    await senderPc.setRemoteDescription(answer);
   }
-
-  videoTransceivers.forEach((t, i) => applyCodecPreferences(t, i + 1));
-  console.log('senderPc: created with', receiveVideoCount, 'video transceiver(s)');
-
-  // Generate the offer so transceiver mids are assigned before ontrack fires.
-  await senderPc.setLocalDescription();
-
-  // Map each video transceiver's mid to a remote-video index.
-  const midToVideoIndex = new Map();
-  senderPc.getTransceivers()
-      .filter(t => t.sender.track && t.sender.track.kind === 'video')
-      .forEach((t, idx) => {
-        if (t.mid !== null) midToVideoIndex.set(t.mid, idx);
-      });
-
-  // Assign each incoming video track to its corresponding video element.
-  receiverPc.ontrack = e => {
-    if (e.track.kind !== 'video') return;
-    const idx = midToVideoIndex.get(e.transceiver.mid);
-    if (idx === undefined || !remoteVideos[idx]) return;
-    const stream = e.streams[0] || new MediaStream([e.track]);
-    if (remoteVideos[idx].srcObject !== stream) {
-      remoteVideos[idx].srcObject = stream;
-      console.log(`video${idx + 1}: received remote stream (mid=${e.transceiver.mid})`);
-    }
-  };
-
-  await receiverPc.setRemoteDescription(senderPc.localDescription);
-  await receiverPc.setLocalDescription();
-  await senderPc.setRemoteDescription(receiverPc.localDescription);
   console.log('negotiation completed');
-
-  peerPairs = [{senderPc, receiverPc}];
-  startStatsPolling(senderPc, receiverPc, midToVideoIndex);
   updateStatus();
-}
-
-function startStatsPolling(senderPc, receiverPc, midToVideoIndex) {
-  stopStatsPolling();
-  statsIntervalId = setInterval(() => {
-    updateCodecLabels(senderPc, receiverPc, midToVideoIndex);
-  }, 1500);
-}
-
-function stopStatsPolling() {
-  if (statsIntervalId !== null) {
-    clearInterval(statsIntervalId);
-    statsIntervalId = null;
-  }
-}
-
-async function updateCodecLabels(senderPc, receiverPc, midToVideoIndex) {
-  const encoderByMid = new Map();
-  try {
-    const stats = await senderPc.getStats();
-    stats.forEach(s => {
-      if (s.type === 'outbound-rtp' && s.kind === 'video' && s.mid != null) {
-        encoderByMid.set(s.mid, {impl: s.encoderImplementation, hw: s.powerEfficientEncoder});
-      }
-    });
-  } catch (_) {
-    // PC may be closing
-  }
-
-  const decoderByMid = new Map();
-  try {
-    const stats = await receiverPc.getStats();
-    stats.forEach(s => {
-      if (s.type === 'inbound-rtp' && s.kind === 'video' && s.mid != null) {
-        decoderByMid.set(s.mid, {impl: s.decoderImplementation, hw: s.powerEfficientDecoder});
-      }
-    });
-  } catch (_) {
-    // PC may be closing
-  }
-
-  for (const [mid, idx] of midToVideoIndex) {
-    if (idx >= codecLabels.length) continue;
-    const parts = [
-      formatCodecInfo('Enc', encoderByMid.get(mid)),
-      formatCodecInfo('Dec', decoderByMid.get(mid))
-    ].filter(Boolean);
-    codecLabels[idx].textContent = parts.length ? parts.join(' | ') : '-';
-  }
-}
-
-function formatCodecInfo(prefix, info) {
-  if (!info || !info.impl) return '';
-  const hw = info.hw === true ? ' (HW)' : info.hw === false ? ' (SW)' : '';
-  return `${prefix}: ${info.impl}${hw}`;
 }
 
 function hangup() {
   console.log('Ending call');
-  stopStatsPolling();
-  peerPairs.forEach(pair => {
-    pair.senderPc.close();
-    pair.receiverPc.close();
-  });
-  peerPairs = [];
+  if (senderPc) {
+    senderPc.close();
+    senderPc = null;
+  }
+  receiverPcs.forEach(pc => pc.close());
+  receiverPcs = [];
   resetRemoteVideos(0);
   connectionStates = [];
   statusDiv.textContent = '';
@@ -309,7 +232,6 @@ function resetRemoteVideos(count) {
     video.srcObject = null;
   });
   remoteVideos = [];
-  codecLabels = [];
   remoteVideosDiv.textContent = '';
   for (let i = 0; i < count; i++) {
     const container = document.createElement('div');
@@ -320,16 +242,10 @@ function resetRemoteVideos(count) {
     video.autoplay = true;
     video.playsInline = true;
 
-    const label = document.createElement('span');
-    label.className = 'codec-label';
-    label.textContent = '\u2026'; // ellipsis while waiting for stats
-
     container.appendChild(video);
-    container.appendChild(label);
     remoteVideosDiv.appendChild(container);
 
     remoteVideos.push(video);
-    codecLabels.push(label);
   }
 }
 

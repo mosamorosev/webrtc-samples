@@ -18,7 +18,10 @@ video {
   margin: 0 0 20px 0;
   --width: 40%;
   width: var(--width);
-  height: calc(var(--width) * 0.75);
+  height: auto;
+  aspect-ratio: auto;
+  background: #000;
+  object-fit: contain;
 }
 
 video#video1 {
@@ -40,13 +43,7 @@ div#remoteVideos {
   margin: 0;
 }
 
-.codec-label {
-  margin: 4px 0 0;
-  font-size: 11px;
-  font-family: monospace;
-  color: #444;
-  white-space: nowrap;
-}
+/* Codec label removed from UI to keep decoding views clean. */
 
 input#videoCountInput {
   width: 72px;
@@ -62,7 +59,6 @@ div#status {
   }
 
   video {
-    height: 90px;
     margin: 0 0 10px 0;
     width: calc(50% - 8px);
   }
