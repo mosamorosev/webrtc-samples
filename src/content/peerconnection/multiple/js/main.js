@@ -42,6 +42,21 @@ initCodecSelect();
 // Exposed for webdriver test synchronization.
 window.multiplePageLoaded = true;
 window.multiplePageLoadTs = Date.now();
+window.__multiplePageErrors = [];
+window.addEventListener('error', event => {
+  window.__multiplePageErrors.push({
+    message: event.message,
+    filename: event.filename,
+    lineno: event.lineno,
+    colno: event.colno
+  });
+});
+window.addEventListener('unhandledrejection', event => {
+  const reason = event.reason;
+  window.__multiplePageErrors.push({
+    message: reason && reason.message ? reason.message : String(reason)
+  });
+});
 videoCodecSelect.onchange = () => {
   preferredVideoCodecMimeType = videoCodecSelect.value;
 };

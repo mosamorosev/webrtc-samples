@@ -33,10 +33,31 @@ describe('multiple peerconnections', () => {
 
   // This test does real WebRTC negotiation and can be slow on shared CI machines.
   it('establishes multiple connections and hangs up', async () => {
-    await driver.wait(() => driver.executeScript(() => {
-      return typeof window.multiplePageLoaded !== 'undefined' &&
-        window.multiplePageLoaded === true;
-    }));
+    try {
+      await driver.wait(() => driver.executeScript(() => {
+        return typeof window.multiplePageLoaded !== 'undefined' &&
+          window.multiplePageLoaded === true;
+      }));
+    } catch (e) {
+      // Provide actionable diagnostics in CI logs when the page scripts
+      // fail to execute in the webdriver environment.
+      const diagnostics = await driver.executeScript(() => {
+        const startButtonPresent = !!document.getElementById('startButton');
+        return {
+          href: location.href,
+          pathname: location.pathname,
+          title: document.title,
+          readyState: document.readyState,
+          startButtonPresent,
+          multiplePageLoaded: window.multiplePageLoaded,
+          multiplePageLoadTs: window.multiplePageLoadTs,
+          errors: window.__multiplePageErrors || []
+        };
+      });
+      // eslint-disable-next-line no-console
+      console.error('multiple page diagnostics:', JSON.stringify(diagnostics));
+      throw e;
+    }
     await driver.wait(webdriver.until.elementLocated(webdriver.By.id('startButton')));
 
     await driver.findElement(webdriver.By.id('startButton')).click();
