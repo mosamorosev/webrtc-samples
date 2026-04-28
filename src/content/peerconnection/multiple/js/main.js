@@ -39,7 +39,9 @@ let connectionStates = [];
 const supportsSetCodecPreferences = window.RTCRtpTransceiver &&
   'setCodecPreferences' in window.RTCRtpTransceiver.prototype;
 initCodecSelect();
+// Exposed for webdriver test synchronization.
 window.multiplePageLoaded = true;
+window.multiplePageLoadTs = Date.now();
 videoCodecSelect.onchange = () => {
   preferredVideoCodecMimeType = videoCodecSelect.value;
 };
