@@ -25,6 +25,37 @@ video#video1 {
   margin: 0 20px 20px 0;
 }
 
+div#remoteVideos {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.video-container {
+  display: inline-flex;
+  flex-direction: column;
+  margin: 0 20px 20px 0;
+}
+
+.video-container video {
+  margin: 0;
+}
+
+.codec-label {
+  margin: 4px 0 0;
+  font-size: 11px;
+  font-family: monospace;
+  color: #444;
+  white-space: nowrap;
+}
+
+input#videoCountInput {
+  width: 72px;
+}
+
+div#status {
+  margin: 8px 0 0;
+}
+
 @media screen and (max-width: 400px) {
   button {
     margin: 0 11px 10px 0;

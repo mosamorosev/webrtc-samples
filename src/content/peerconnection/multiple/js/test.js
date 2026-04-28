@@ -28,42 +28,47 @@ describe('multiple peerconnections', () => {
   });
 
   it('establishes multiple connections and hangs up', async () => {
+    await driver.wait(() => driver.executeScript(() => {
+      return document.getElementById('videoCountInput').value === '2';
+    }));
+    await driver.wait(() => driver.executeScript(() => {
+      return document.getElementById('videoCodecSelect').options.length > 0;
+    }));
+
     await driver.findElement(webdriver.By.id('startButton')).click();
 
     await driver.wait(() => driver.executeScript(() => {
       return localStream !== null; // eslint-disable-line no-undef
     }));
     await driver.wait(() => driver.findElement(webdriver.By.id('callButton')).isEnabled());
+    await driver.wait(() => driver.findElement(webdriver.By.id('videoCodecSelect')).isEnabled());
     await driver.findElement(webdriver.By.id('callButton')).click();
+    await driver.wait(() => driver.findElement(webdriver.By.id('videoCodecSelect')).isEnabled()
+        .then(enabled => !enabled));
+
+    // With the new topology there is one senderPc + one receiverPc regardless
+    // of the number of requested receive videos.
+    await driver.wait(() => driver.executeScript(() => {
+      return peerPairs.length === 1; // eslint-disable-line no-undef
+    }));
+    await driver.wait(() => driver.executeScript(() => {
+      return peerPairs[0].receiverPc.connectionState === 'connected'; // eslint-disable-line no-undef
+    }));
 
     await Promise.all([
       driver.wait(() => driver.executeScript(() => {
-        return pc1Remote && pc1Remote.connectionState === 'connected'; // eslint-disable-line no-undef
+        return document.getElementById('remoteVideo1').readyState === HTMLMediaElement.HAVE_ENOUGH_DATA;
       })),
-      await driver.wait(() => driver.executeScript(() => {
-        return pc2Remote && pc2Remote.connectionState === 'connected'; // eslint-disable-line no-undef
-      })),
-    ]);
-
-    await Promise.all([
-      await driver.wait(() => driver.executeScript(() => {
-        return document.getElementById('video2').readyState === HTMLMediaElement.HAVE_ENOUGH_DATA;
-      })),
-      await driver.wait(() => driver.executeScript(() => {
-        return document.getElementById('video3').readyState === HTMLMediaElement.HAVE_ENOUGH_DATA;
+      driver.wait(() => driver.executeScript(() => {
+        return document.getElementById('remoteVideo2').readyState === HTMLMediaElement.HAVE_ENOUGH_DATA;
       })),
     ]);
 
     await driver.findElement(webdriver.By.id('hangupButton')).click();
 
-    await Promise.all([
-      await driver.wait(() => driver.executeScript(() => {
-        return pc1Remote === null; // eslint-disable-line no-undef
-      })),
-      await driver.wait(() => driver.executeScript(() => {
-        return pc2Remote === null; // eslint-disable-line no-undef
-      })),
-    ]);
+    await driver.wait(() => driver.executeScript(() => {
+      return peerPairs.length === 0; // eslint-disable-line no-undef
+    }));
+    await driver.wait(() => driver.findElement(webdriver.By.id('videoCodecSelect')).isEnabled());
   });
 });
-
