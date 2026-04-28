@@ -37,7 +37,7 @@ describe('multiple peerconnections', () => {
       await driver.wait(() => driver.executeScript(() => {
         return typeof window.multiplePageLoaded !== 'undefined' &&
           window.multiplePageLoaded === true;
-      }));
+      }), 15000);
     } catch (e) {
       // Provide actionable diagnostics in CI logs when the page scripts
       // fail to execute in the webdriver environment.
