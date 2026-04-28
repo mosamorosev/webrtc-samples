@@ -68,7 +68,10 @@ describe('multiple peerconnections', () => {
           multiplePageLoadTs: window.multiplePageLoadTs,
           errors: window.__multiplePageErrors || []
         };
-      });
+      }).catch(e => ({
+        diagnosticsFailed: true,
+        message: e && (e.message || String(e))
+      }));
       // eslint-disable-next-line no-console
       console.error('multiple page diagnostics:', JSON.stringify(diagnostics));
       throw new Error('Timed out waiting for window.multiplePageLoaded');
