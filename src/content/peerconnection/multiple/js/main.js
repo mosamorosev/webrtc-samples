@@ -26,9 +26,14 @@ const video1 = document.querySelector('video#video1');
 let preferredVideoCodecMimeType;
 
 let localStream;
+// peerPairs holds at most one entry: [{senderPc, receiverPc}].
+// One senderPc encodes the local stream via N video transceivers;
+// one receiverPc decodes all N incoming streams.
 let peerPairs = [];
 let remoteVideos = [];
+let codecLabels = [];
 let connectionStates = [];
+let statsIntervalId = null;
 
 const supportsSetCodecPreferences = window.RTCRtpTransceiver &&
   'setCodecPreferences' in window.RTCRtpTransceiver.prototype;
@@ -82,15 +87,8 @@ function getSupportedVideoCodecMimeTypes() {
       });
 }
 
-function maybeSetCodecPreferences(pc, displayIndex) {
+function applyCodecPreferences(transceiver, displayIndex) {
   if (!supportsSetCodecPreferences || !preferredVideoCodecMimeType) {
-    return;
-  }
-  const videoTransceiver = pc.getTransceivers().find(transceiver =>
-    transceiver.sender &&
-    transceiver.sender.track &&
-    transceiver.sender.track.kind === 'video');
-  if (!videoTransceiver) {
     return;
   }
   const capabilities = RTCRtpSender.getCapabilities('video');
@@ -107,8 +105,8 @@ function maybeSetCodecPreferences(pc, displayIndex) {
   const selectedCodec = codecs[selectedCodecIndex];
   codecs.splice(selectedCodecIndex, 1);
   codecs.unshift(selectedCodec);
-  videoTransceiver.setCodecPreferences(codecs);
-  console.log(`pc${displayIndex}: preferred video codec ${preferredVideoCodecMimeType}`);
+  transceiver.setCodecPreferences(codecs);
+  console.log(`transceiver${displayIndex}: preferred video codec ${preferredVideoCodecMimeType}`);
 }
 
 async function start() {
@@ -128,7 +126,7 @@ async function call() {
   videoCountInput.disabled = true;
   videoCodecSelect.disabled = true;
   const receiveVideoCount = getRequestedVideoCount();
-  console.log(`Starting ${receiveVideoCount} call(s)`);
+  console.log(`Setting up ${receiveVideoCount} receive video(s)`);
   const audioTracks = localStream.getAudioTracks();
   const videoTracks = localStream.getVideoTracks();
   if (audioTracks.length > 0) {
@@ -137,63 +135,156 @@ async function call() {
   if (videoTracks.length > 0) {
     console.log(`Using video device: ${videoTracks[0].label}`);
   }
+
   resetRemoteVideos(receiveVideoCount);
-  peerPairs = [];
   connectionStates = new Array(receiveVideoCount).fill('new');
   updateStatus();
-  const negotiationPromises = [];
+
+  // One senderPc encodes the local stream; one receiverPc decodes all N streams.
+  const senderPc = new RTCPeerConnection();
+  const receiverPc = new RTCPeerConnection();
+
+  senderPc.onicecandidate = e => {
+    if (e.candidate) {
+      receiverPc.addIceCandidate(e.candidate).catch(err => {
+        console.warn('receiverPc.addIceCandidate failed', err);
+      });
+    }
+  };
+  receiverPc.onicecandidate = e => {
+    if (e.candidate) {
+      senderPc.addIceCandidate(e.candidate).catch(err => {
+        console.warn('senderPc.addIceCandidate failed', err);
+      });
+    }
+  };
+
+  receiverPc.onconnectionstatechange = () => {
+    const state = receiverPc.connectionState;
+    connectionStates = new Array(receiveVideoCount).fill(state);
+    console.log(`connection state: ${state}`);
+    updateStatus();
+  };
+
+  const videoTrack = videoTracks[0];
+  const audioTrack = audioTracks[0];
+
+  // Add N (video + audio) transceiver pairs to senderPc — one pair per receive view.
+  // Each pair shares a distinct MediaStream so the receiver delivers them independently.
+  const videoTransceivers = [];
   for (let i = 0; i < receiveVideoCount; i++) {
-    const displayIndex = i + 1;
-    const localPc = new RTCPeerConnection();
-    const remotePc = new RTCPeerConnection();
-    remotePc.ontrack = e => gotRemoteStream(e, remoteVideos[i], displayIndex);
-    remotePc.onconnectionstatechange = () => {
-      setConnectionState(i, remotePc.connectionState);
-    };
-    localStream.getTracks().forEach(track => {
-      localPc.addTrack(track, localStream);
+    const stream = new MediaStream(
+        [videoTrack, audioTrack].filter(Boolean));
+    const videoTransceiver = senderPc.addTransceiver(videoTrack, {
+      direction: 'sendonly',
+      streams: [stream]
     });
-    maybeSetCodecPreferences(localPc, displayIndex);
-    console.log(`pc${displayIndex}: created local and remote peer connection objects`);
-    peerPairs.push({localPc, remotePc});
-    negotiationPromises.push(negotiate(localPc, remotePc, displayIndex));
+    videoTransceivers.push(videoTransceiver);
+    if (audioTrack) {
+      senderPc.addTransceiver(audioTrack, {
+        direction: 'sendonly',
+        streams: [stream]
+      });
+    }
   }
-  const results = await Promise.allSettled(negotiationPromises);
-  const failedCount = results.filter(result => result.status === 'rejected').length;
-  if (failedCount > 0) {
-    console.warn(`${failedCount} negotiation(s) failed`);
-  }
+
+  videoTransceivers.forEach((t, i) => applyCodecPreferences(t, i + 1));
+  console.log('senderPc: created with', receiveVideoCount, 'video transceiver(s)');
+
+  // Generate the offer so transceiver mids are assigned before ontrack fires.
+  await senderPc.setLocalDescription();
+
+  // Map each video transceiver's mid to a remote-video index.
+  const midToVideoIndex = new Map();
+  senderPc.getTransceivers()
+      .filter(t => t.sender.track && t.sender.track.kind === 'video')
+      .forEach((t, idx) => {
+        if (t.mid !== null) midToVideoIndex.set(t.mid, idx);
+      });
+
+  // Assign each incoming video track to its corresponding video element.
+  receiverPc.ontrack = e => {
+    if (e.track.kind !== 'video') return;
+    const idx = midToVideoIndex.get(e.transceiver.mid);
+    if (idx === undefined || !remoteVideos[idx]) return;
+    const stream = e.streams[0] || new MediaStream([e.track]);
+    if (remoteVideos[idx].srcObject !== stream) {
+      remoteVideos[idx].srcObject = stream;
+      console.log(`video${idx + 1}: received remote stream (mid=${e.transceiver.mid})`);
+    }
+  };
+
+  await receiverPc.setRemoteDescription(senderPc.localDescription);
+  await receiverPc.setLocalDescription();
+  await senderPc.setRemoteDescription(receiverPc.localDescription);
+  console.log('negotiation completed');
+
+  peerPairs = [{senderPc, receiverPc}];
+  startStatsPolling(senderPc, receiverPc, midToVideoIndex);
   updateStatus();
 }
 
-async function negotiate(localPc, remotePc, displayIndex) {
-  localPc.onicecandidate = e => {
-    if (e.candidate) {
-      remotePc.addIceCandidate(e.candidate).catch(err => {
-        console.warn(`pc${displayIndex}: remotePc.addIceCandidate failed`, err);
-      });
-    }
-  };
-  remotePc.onicecandidate = e => {
-    if (e.candidate) {
-      localPc.addIceCandidate(e.candidate).catch(err => {
-        console.warn(`pc${displayIndex}: localPc.addIceCandidate failed`, err);
-      });
-    }
-  };
+function startStatsPolling(senderPc, receiverPc, midToVideoIndex) {
+  stopStatsPolling();
+  statsIntervalId = setInterval(() => {
+    updateCodecLabels(senderPc, receiverPc, midToVideoIndex);
+  }, 1500);
+}
 
-  await localPc.setLocalDescription();
-  await remotePc.setRemoteDescription(localPc.localDescription);
-  await remotePc.setLocalDescription();
-  await localPc.setRemoteDescription(remotePc.localDescription);
-  console.log(`pc${displayIndex}: negotiation completed`);
+function stopStatsPolling() {
+  if (statsIntervalId !== null) {
+    clearInterval(statsIntervalId);
+    statsIntervalId = null;
+  }
+}
+
+async function updateCodecLabels(senderPc, receiverPc, midToVideoIndex) {
+  const encoderByMid = new Map();
+  try {
+    const stats = await senderPc.getStats();
+    stats.forEach(s => {
+      if (s.type === 'outbound-rtp' && s.kind === 'video' && s.mid != null) {
+        encoderByMid.set(s.mid, {impl: s.encoderImplementation, hw: s.powerEfficientEncoder});
+      }
+    });
+  } catch (_) {
+    // PC may be closing
+  }
+
+  const decoderByMid = new Map();
+  try {
+    const stats = await receiverPc.getStats();
+    stats.forEach(s => {
+      if (s.type === 'inbound-rtp' && s.kind === 'video' && s.mid != null) {
+        decoderByMid.set(s.mid, {impl: s.decoderImplementation, hw: s.powerEfficientDecoder});
+      }
+    });
+  } catch (_) {
+    // PC may be closing
+  }
+
+  for (const [mid, idx] of midToVideoIndex) {
+    if (idx >= codecLabels.length) continue;
+    const parts = [
+      formatCodecInfo('Enc', encoderByMid.get(mid)),
+      formatCodecInfo('Dec', decoderByMid.get(mid))
+    ].filter(Boolean);
+    codecLabels[idx].textContent = parts.length ? parts.join(' | ') : '-';
+  }
+}
+
+function formatCodecInfo(prefix, info) {
+  if (!info || !info.impl) return '';
+  const hw = info.hw === true ? ' (HW)' : info.hw === false ? ' (SW)' : '';
+  return `${prefix}: ${info.impl}${hw}`;
 }
 
 function hangup() {
-  console.log('Ending calls');
+  console.log('Ending call');
+  stopStatsPolling();
   peerPairs.forEach(pair => {
-    pair.localPc.close();
-    pair.remotePc.close();
+    pair.senderPc.close();
+    pair.receiverPc.close();
   });
   peerPairs = [];
   resetRemoteVideos(0);
@@ -203,13 +294,6 @@ function hangup() {
   callButton.disabled = false;
   videoCountInput.disabled = false;
   videoCodecSelect.disabled = false;
-}
-
-function gotRemoteStream(e, videoObject, index) {
-  if (videoObject.srcObject !== e.streams[0]) {
-    videoObject.srcObject = e.streams[0];
-    console.log(`pc${index}: received remote stream`);
-  }
 }
 
 function getRequestedVideoCount() {
@@ -225,21 +309,28 @@ function resetRemoteVideos(count) {
     video.srcObject = null;
   });
   remoteVideos = [];
+  codecLabels = [];
   remoteVideosDiv.textContent = '';
   for (let i = 0; i < count; i++) {
+    const container = document.createElement('div');
+    container.className = 'video-container';
+
     const video = document.createElement('video');
     video.id = `remoteVideo${i + 1}`;
     video.autoplay = true;
     video.playsInline = true;
-    remoteVideos.push(video);
-    remoteVideosDiv.appendChild(video);
-  }
-}
 
-function setConnectionState(index, state) {
-  connectionStates[index] = state;
-  console.log(`pc${index + 1}: remote connection state ${state}`);
-  updateStatus();
+    const label = document.createElement('span');
+    label.className = 'codec-label';
+    label.textContent = '\u2026'; // ellipsis while waiting for stats
+
+    container.appendChild(video);
+    container.appendChild(label);
+    remoteVideosDiv.appendChild(container);
+
+    remoteVideos.push(video);
+    codecLabels.push(label);
+  }
 }
 
 function updateStatus() {

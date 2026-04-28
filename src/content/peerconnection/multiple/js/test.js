@@ -46,11 +46,13 @@ describe('multiple peerconnections', () => {
     await driver.wait(() => driver.findElement(webdriver.By.id('videoCodecSelect')).isEnabled()
         .then(enabled => !enabled));
 
+    // With the new topology there is one senderPc + one receiverPc regardless
+    // of the number of requested receive videos.
     await driver.wait(() => driver.executeScript(() => {
-      return peerPairs.length === 2; // eslint-disable-line no-undef
+      return peerPairs.length === 1; // eslint-disable-line no-undef
     }));
     await driver.wait(() => driver.executeScript(() => {
-      return peerPairs.every(pair => pair.remotePc && pair.remotePc.connectionState === 'connected'); // eslint-disable-line no-undef
+      return peerPairs[0].receiverPc.connectionState === 'connected'; // eslint-disable-line no-undef
     }));
 
     await Promise.all([
