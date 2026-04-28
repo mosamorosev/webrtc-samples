@@ -27,7 +27,7 @@ describe('multiple peerconnections', () => {
     // webdriver.get() can occasionally return before navigation settles.
     // Retry until the expected URL is observed.
     return driver.get(url).then(() => driver.wait(() =>
-      driver.getCurrentUrl().then(currentUrl => currentUrl.includes(path))
+      driver.executeScript(() => location.pathname).then(p => p.endsWith(path))
     ));
   });
 
