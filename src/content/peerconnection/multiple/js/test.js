@@ -36,7 +36,7 @@ describe('multiple peerconnections', () => {
     const sentinel = () => driver.executeScript(() => {
       return typeof window.multiplePageLoaded !== 'undefined' &&
         window.multiplePageLoaded === true;
-    });
+    }).catch(() => false);
 
     const sentinelDeadlineMs = Date.now() + 15000;
     // We explicitly catch WebDriver timeouts (rather than letting them bubble
