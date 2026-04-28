@@ -56,6 +56,8 @@ describe('multiple peerconnections', () => {
       });
       // eslint-disable-next-line no-console
       console.error('multiple page diagnostics:', JSON.stringify(diagnostics));
+      // eslint-disable-next-line no-console
+      console.error('multiple page wait error:', e && (e.stack || e.message || String(e)));
       throw e;
     }
     await driver.wait(webdriver.until.elementLocated(webdriver.By.id('startButton')));
