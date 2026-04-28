@@ -1,0 +1,50 @@
+name: publish-working-branch
+
+on:
+  push:
+    branches:
+      - copilot/**
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Deploy preview branch snapshot
+        run: |
+          set -eux
+          SANITIZED_REF_NAME="$(printf '%s' "${GITHUB_REF_NAME}" | sed -E 's#[^A-Za-z0-9._-]#-#g')"
+          TARGET_BRANCH="copilot-preview-${SANITIZED_REF_NAME:-unknown-ref}"
+          PREVIEW_WORKTREE="/tmp/preview-${TARGET_BRANCH}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git fetch origin
+          rm -rf "${PREVIEW_WORKTREE}"
+          if git show-ref --verify --quiet "refs/remotes/origin/${TARGET_BRANCH}"; then
+            git worktree add "${PREVIEW_WORKTREE}" "origin/${TARGET_BRANCH}"
+          else
+            echo "Preview branch ${TARGET_BRANCH} does not exist yet; creating it."
+            git worktree add -b "${TARGET_BRANCH}" "${PREVIEW_WORKTREE}"
+          fi
+
+          rsync -a --delete \
+            --exclude='.git' \
+            --exclude='.github/workflows' \
+            ./ "${PREVIEW_WORKTREE}/"
+          touch "${PREVIEW_WORKTREE}/.nojekyll"
+
+          cd "${PREVIEW_WORKTREE}"
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m "Deploy ${GITHUB_SHA}"
+            git push origin "HEAD:${TARGET_BRANCH}"
+          else
+            echo "No changes to deploy."
+          fi
