@@ -29,6 +29,8 @@ describe('multiple peerconnections', () => {
 
   // This test does real WebRTC negotiation and can be slow on shared CI machines.
   it('establishes multiple connections and hangs up', async () => {
+    await driver.wait(() => driver.getCurrentUrl().then(currentUrl => currentUrl.includes(path)));
+
     await driver.wait(() => driver.executeScript(() => {
       return typeof window.multiplePageLoaded !== 'undefined' &&
         window.multiplePageLoaded === true;
