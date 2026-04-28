@@ -175,11 +175,11 @@ async function call() {
   for (let i = 0; i < receiveVideoCount; i++) {
     const stream = new MediaStream(
         [videoTrack, audioTrack].filter(Boolean));
-    const vt = senderPc.addTransceiver(videoTrack, {
+    const videoTransceiver = senderPc.addTransceiver(videoTrack, {
       direction: 'sendonly',
       streams: [stream]
     });
-    videoTransceivers.push(vt);
+    videoTransceivers.push(videoTransceiver);
     if (audioTrack) {
       senderPc.addTransceiver(audioTrack, {
         direction: 'sendonly',
@@ -269,7 +269,7 @@ async function updateCodecLabels(senderPc, receiverPc, midToVideoIndex) {
       formatCodecInfo('Enc', encoderByMid.get(mid)),
       formatCodecInfo('Dec', decoderByMid.get(mid))
     ].filter(Boolean);
-    codecLabels[idx].textContent = parts.length ? parts.join(' \u2502 ') : '\u2014';
+    codecLabels[idx].textContent = parts.length ? parts.join(' | ') : '-';
   }
 }
 
