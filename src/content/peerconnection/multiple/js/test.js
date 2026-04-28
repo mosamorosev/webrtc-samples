@@ -29,11 +29,10 @@ describe('multiple peerconnections', () => {
 
   // This test does real WebRTC negotiation and can be slow on shared CI machines.
   it('establishes multiple connections and hangs up', async () => {
-    await driver.wait(() => driver.executeScript(() => {
-      // Sometimes the test starts executing before the page scripts are ready.
-      return document.readyState === 'complete' &&
-        typeof window.multiplePageLoaded !== 'undefined';
-    }));
+    // Some selenium environments never reach `readyState=complete` for file:// pages.
+    // Instead wait for the elements we need + the script-initialized flag.
+    await driver.wait(() => driver.findElement(webdriver.By.id('startButton')));
+    await driver.wait(() => driver.executeScript(() => typeof window.multiplePageLoaded !== 'undefined'));
     await driver.wait(() => driver.executeScript(() => window.multiplePageLoaded === true));
 
     await driver.findElement(webdriver.By.id('startButton')).click();
