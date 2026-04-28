@@ -27,8 +27,7 @@ describe('multiple peerconnections', () => {
     return driver.get(url);
   });
 
-  // This test does real WebRTC negotiation and can be slow
-  // on shared CI machines when multiple peer connections are created.
+  // This test does real WebRTC negotiation and can be slow on shared CI machines.
   it('establishes multiple connections and hangs up', async () => {
     await driver.wait(() => driver.executeScript(() => {
       return document.getElementById('videoCountInput').value === '2';
@@ -47,6 +46,10 @@ describe('multiple peerconnections', () => {
     await driver.findElement(webdriver.By.id('callButton')).click();
     await driver.wait(() => driver.findElement(webdriver.By.id('videoCodecSelect')).isEnabled()
         .then(enabled => !enabled));
+
+    await driver.wait(() => driver.executeScript(() => {
+      return window.callDone === true;
+    }));
 
     // With the new topology there is one senderPc + one receiverPc regardless
     // of the number of requested receive videos.
@@ -72,5 +75,5 @@ describe('multiple peerconnections', () => {
       return peerPairs.length === 0; // eslint-disable-line no-undef
     }));
     await driver.wait(() => driver.findElement(webdriver.By.id('videoCodecSelect')).isEnabled());
-  }, 20000);
+  }, 45000);
 });

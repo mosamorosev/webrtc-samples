@@ -44,6 +44,7 @@ videoCodecSelect.onchange = () => {
 };
 
 window.peerPairs = peerPairs;
+window.callDone = false;
 
 function initCodecSelect() {
   const codecMimeTypes = getSupportedVideoCodecMimeTypes();
@@ -124,6 +125,7 @@ async function start() {
 }
 
 async function call() {
+  window.callDone = false;
   callButton.disabled = true;
   hangupButton.disabled = false;
   videoCountInput.disabled = true;
@@ -207,11 +209,13 @@ async function call() {
     await senderPc.setRemoteDescription(answer);
   }
   console.log('negotiation completed');
+  window.callDone = true;
   updateStatus();
 }
 
 function hangup() {
   console.log('Ending call');
+  window.callDone = false;
   if (senderPc) {
     senderPc.close();
     senderPc = null;
