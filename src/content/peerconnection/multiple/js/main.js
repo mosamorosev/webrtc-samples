@@ -29,6 +29,10 @@ let localStream;
 // One shared sender PC encodes the local stream; each view has its own receiver PC.
 let senderPc;
 let receiverPcs = [];
+// Backward-compatible global expected by selenium tests.
+// Keep a single entry that reflects the current topology.
+// Exported for webdriver tests via window.peerPairs.
+let peerPairs = [];
 let remoteVideos = [];
 let connectionStates = [];
 
@@ -38,6 +42,8 @@ initCodecSelect();
 videoCodecSelect.onchange = () => {
   preferredVideoCodecMimeType = videoCodecSelect.value;
 };
+
+window.peerPairs = peerPairs;
 
 function initCodecSelect() {
   const codecMimeTypes = getSupportedVideoCodecMimeTypes();
@@ -139,6 +145,8 @@ async function call() {
 
   senderPc = new RTCPeerConnection();
   receiverPcs = new Array(receiveVideoCount).fill(null).map(() => new RTCPeerConnection());
+  peerPairs = [{senderPc, receiverPc: receiverPcs[0]}];
+  window.peerPairs = peerPairs;
 
   const videoTrack = videoTracks[0];
   const audioTrack = audioTracks[0];
@@ -210,6 +218,8 @@ function hangup() {
   }
   receiverPcs.forEach(pc => pc.close());
   receiverPcs = [];
+  peerPairs = [];
+  window.peerPairs = peerPairs;
   resetRemoteVideos(0);
   connectionStates = [];
   statusDiv.textContent = '';
