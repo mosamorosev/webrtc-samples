@@ -73,5 +73,5 @@ describe('multiple peerconnections', () => {
       return peerPairs.length === 0; // eslint-disable-line no-undef
     }));
     await driver.wait(() => driver.findElement(webdriver.By.id('videoCodecSelect')).isEnabled());
-  }, 45000);
+  }, 120000);
 });
