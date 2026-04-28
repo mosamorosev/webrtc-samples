@@ -29,9 +29,6 @@ describe('multiple peerconnections', () => {
 
   // This test does real WebRTC negotiation and can be slow on shared CI machines.
   it('establishes multiple connections and hangs up', async () => {
-    // Make sure the DOM is interactive before querying elements.
-    await driver.wait(() => driver.executeScript(() => document.readyState === 'complete'));
-
     await driver.wait(() => driver.findElements(webdriver.By.id('videoCountInput'))
         .then(els => els.length === 1));
     await driver.wait(() => driver.findElements(webdriver.By.id('videoCodecSelect'))
