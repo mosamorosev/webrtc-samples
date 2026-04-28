@@ -33,12 +33,27 @@ describe('multiple peerconnections', () => {
 
   // This test does real WebRTC negotiation and can be slow on shared CI machines.
   it('establishes multiple connections and hangs up', async () => {
-    try {
-      await driver.wait(() => driver.executeScript(() => {
-        return typeof window.multiplePageLoaded !== 'undefined' &&
-          window.multiplePageLoaded === true;
-      }), 15000);
-    } catch (e) {
+    const sentinel = () => driver.executeScript(() => {
+      return typeof window.multiplePageLoaded !== 'undefined' &&
+        window.multiplePageLoaded === true;
+    });
+
+    const sentinelDeadlineMs = Date.now() + 15000;
+    // We explicitly catch WebDriver timeouts (rather than letting them bubble
+    // into Jest) so we can print diagnostics to the CI log.
+    while (Date.now() < sentinelDeadlineMs) {
+      try {
+        await driver.wait(sentinel, 2000);
+        break;
+      } catch (e) {
+        if (!(e instanceof webdriver.error.TimeoutError)) {
+          throw e;
+        }
+      }
+    }
+
+    const loaded = await sentinel();
+    if (!loaded) {
       // Provide actionable diagnostics in CI logs when the page scripts
       // fail to execute in the webdriver environment.
       const diagnostics = await driver.executeScript(() => {
@@ -56,9 +71,7 @@ describe('multiple peerconnections', () => {
       });
       // eslint-disable-next-line no-console
       console.error('multiple page diagnostics:', JSON.stringify(diagnostics));
-      // eslint-disable-next-line no-console
-      console.error('multiple page wait error:', e && (e.stack || e.message || String(e)));
-      throw e;
+      throw new Error('Timed out waiting for window.multiplePageLoaded');
     }
     await driver.wait(webdriver.until.elementLocated(webdriver.By.id('startButton')));
 
