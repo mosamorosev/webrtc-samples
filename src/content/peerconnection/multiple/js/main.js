@@ -39,6 +39,7 @@ let connectionStates = [];
 const supportsSetCodecPreferences = window.RTCRtpTransceiver &&
   'setCodecPreferences' in window.RTCRtpTransceiver.prototype;
 initCodecSelect();
+window.multiplePageLoaded = true;
 videoCodecSelect.onchange = () => {
   preferredVideoCodecMimeType = videoCodecSelect.value;
 };
