@@ -120,7 +120,8 @@ describe('multiple peerconnections', () => {
       };
       // eslint-disable-next-line no-console
       console.error('MULTIPLE_DIAGNOSTICS_LINE', JSON.stringify(shortDiagnostics));
-      throw new Error('Timed out waiting for window.multiplePageLoaded');
+      throw new Error(
+          `Timed out waiting for window.multiplePageLoaded MULTIPLE_DIAGNOSTICS_LINE=${JSON.stringify(shortDiagnostics)}`);
     }
     await driver.wait(webdriver.until.elementLocated(webdriver.By.id('startButton')));
 
