@@ -97,8 +97,9 @@ describe('multiple peerconnections', () => {
             diagnostics.errors[diagnostics.errors.length - 1] : null
         };
         lastMultipleDiagnostics = shortDiagnostics;
+        // Avoid console.error: Jest treats it as a test failure.
         // eslint-disable-next-line no-console
-        console.error('MULTIPLE_DIAGNOSTICS_LINE', JSON.stringify(shortDiagnostics));
+        console.log('MULTIPLE_DIAGNOSTICS_LINE', JSON.stringify(shortDiagnostics));
         throw e;
       }
     };
@@ -153,8 +154,9 @@ describe('multiple peerconnections', () => {
       };
 
       lastMultipleDiagnostics = shortDiagnostics;
+      // Avoid console.error: Jest treats it as a test failure.
       // eslint-disable-next-line no-console
-      console.error('MULTIPLE_DIAGNOSTICS_LINE', JSON.stringify(shortDiagnostics));
+      console.log('MULTIPLE_DIAGNOSTICS_LINE', JSON.stringify(shortDiagnostics));
       // Put the diagnostic payload into the failure assertion so Jest prints it
       // inline with the failure (which survives log truncation better than
       // free-form console output).
