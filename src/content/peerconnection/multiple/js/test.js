@@ -70,6 +70,23 @@ describe('multiple peerconnections', () => {
 
   // This test does real WebRTC negotiation and can be slow on shared CI machines.
   it('establishes multiple connections and hangs up', async () => {
+    const getDiagnostics = () => driver.executeScript(() => {
+      const startButtonPresent = !!document.getElementById('startButton');
+      return {
+        href: location.href,
+        pathname: location.pathname,
+        title: document.title,
+        readyState: document.readyState,
+        startButtonPresent,
+        multiplePageLoaded: window.multiplePageLoaded,
+        multiplePageLoadTs: window.multiplePageLoadTs,
+        errors: window.__multiplePageErrors || []
+      };
+    }).catch(e => ({
+      diagnosticsFailed: true,
+      message: e && (e.message || String(e))
+    }));
+
     const sentinel = () => driver.executeScript(() => {
       return typeof window.multiplePageLoaded !== 'undefined' &&
         window.multiplePageLoaded === true;
@@ -91,28 +108,9 @@ describe('multiple peerconnections', () => {
 
     const loaded = await sentinel();
     if (!loaded) {
+      const diagnostics = await getDiagnostics();
       // eslint-disable-next-line no-console
-      console.error('multiple page diagnostic marker');
-      // Provide actionable diagnostics in CI logs when the page scripts
-      // fail to execute in the webdriver environment.
-      const diagnostics = await driver.executeScript(() => {
-        const startButtonPresent = !!document.getElementById('startButton');
-        return {
-          href: location.href,
-          pathname: location.pathname,
-          title: document.title,
-          readyState: document.readyState,
-          startButtonPresent,
-          multiplePageLoaded: window.multiplePageLoaded,
-          multiplePageLoadTs: window.multiplePageLoadTs,
-          errors: window.__multiplePageErrors || []
-        };
-      }).catch(e => ({
-        diagnosticsFailed: true,
-        message: e && (e.message || String(e))
-      }));
-      // eslint-disable-next-line no-console
-      console.error('multiple page diagnostics:', JSON.stringify(diagnostics));
+      console.error('MULTIPLE_DIAGNOSTICS', JSON.stringify(diagnostics));
       throw new Error('Timed out waiting for window.multiplePageLoaded');
     }
     await driver.wait(webdriver.until.elementLocated(webdriver.By.id('startButton')));
