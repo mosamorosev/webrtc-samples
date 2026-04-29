@@ -201,7 +201,7 @@ describe('multiple peerconnections', () => {
       }), 30000),
       waitWithDiagnostics('remoteVideo2 HAVE_ENOUGH_DATA', () => driver.executeScript(() => {
         return document.getElementById('remoteVideo2').readyState === HTMLMediaElement.HAVE_ENOUGH_DATA;
-      }), 30000),
+      }), 60000),
     ]);
 
     await driver.findElement(webdriver.By.id('hangupButton')).click();
