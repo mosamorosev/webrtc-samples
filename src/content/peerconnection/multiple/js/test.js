@@ -79,6 +79,30 @@ describe('multiple peerconnections', () => {
 
   // This test does real WebRTC negotiation and can be slow on shared CI machines.
   it('establishes multiple connections and hangs up', async () => {
+    const waitWithDiagnostics = async (description, condition, timeoutMs = 30000) => {
+      try {
+        return await driver.wait(condition, timeoutMs);
+      } catch (e) {
+        if (!(e instanceof webdriver.error.TimeoutError)) {
+          throw e;
+        }
+        const diagnostics = await getDiagnostics();
+        const shortDiagnostics = {
+          where: description,
+          readyState: diagnostics && diagnostics.readyState,
+          startButtonPresent: diagnostics && diagnostics.startButtonPresent,
+          multiplePageLoaded: diagnostics && diagnostics.multiplePageLoaded,
+          errorCount: diagnostics && diagnostics.errors ? diagnostics.errors.length : null,
+          lastError: diagnostics && diagnostics.errors && diagnostics.errors.length ?
+            diagnostics.errors[diagnostics.errors.length - 1] : null
+        };
+        lastMultipleDiagnostics = shortDiagnostics;
+        // eslint-disable-next-line no-console
+        console.error('MULTIPLE_DIAGNOSTICS_LINE', JSON.stringify(shortDiagnostics));
+        throw e;
+      }
+    };
+
     const getDiagnostics = () => driver.executeScript(() => {
       const startButtonPresent = !!document.getElementById('startButton');
       return {
@@ -136,46 +160,53 @@ describe('multiple peerconnections', () => {
       // free-form console output).
       expect('MULTIPLE_DIAGNOSTICS_LINE').toBe(`MULTIPLE_DIAGNOSTICS_LINE=${JSON.stringify(shortDiagnostics)}`);
     }
-    await driver.wait(webdriver.until.elementLocated(webdriver.By.id('startButton')));
+    await waitWithDiagnostics(
+        'elementLocated(startButton)',
+        webdriver.until.elementLocated(webdriver.By.id('startButton')),
+        15000
+    );
 
     await driver.findElement(webdriver.By.id('startButton')).click();
 
-    await driver.wait(() => driver.executeScript(() => {
+    await waitWithDiagnostics('localStream set', () => driver.executeScript(() => {
       return localStream !== null; // eslint-disable-line no-undef
-    }));
-    await driver.wait(() => driver.findElement(webdriver.By.id('callButton')).isEnabled());
-    await driver.wait(() => driver.findElement(webdriver.By.id('videoCodecSelect')).isEnabled());
+    }), 30000);
+    await waitWithDiagnostics('callButton enabled', () => driver.findElement(webdriver.By.id('callButton')).isEnabled(), 15000);
+    await waitWithDiagnostics('videoCodecSelect enabled (pre-call)', () => driver.findElement(webdriver.By.id('videoCodecSelect')).isEnabled(), 15000);
     await driver.findElement(webdriver.By.id('callButton')).click();
-    await driver.wait(() => driver.findElement(webdriver.By.id('videoCodecSelect')).isEnabled()
-        .then(enabled => !enabled));
+    await waitWithDiagnostics(
+        'videoCodecSelect disabled (during call)',
+        () => driver.findElement(webdriver.By.id('videoCodecSelect')).isEnabled().then(enabled => !enabled),
+        15000
+    );
 
-    await driver.wait(() => driver.executeScript(() => {
+    await waitWithDiagnostics('callDone', () => driver.executeScript(() => {
       return window.callDone === true;
-    }));
+    }), 30000);
 
     // With the new topology there is one senderPc + one receiverPc regardless
     // of the number of requested receive videos.
-    await driver.wait(() => driver.executeScript(() => {
+    await waitWithDiagnostics('peerPairs length 1', () => driver.executeScript(() => {
       return peerPairs.length === 1; // eslint-disable-line no-undef
-    }));
-    await driver.wait(() => driver.executeScript(() => {
+    }), 30000);
+    await waitWithDiagnostics('receiverPc connected', () => driver.executeScript(() => {
       return peerPairs[0].receiverPc.connectionState === 'connected'; // eslint-disable-line no-undef
-    }));
+    }), 30000);
 
     await Promise.all([
-      driver.wait(() => driver.executeScript(() => {
+      waitWithDiagnostics('remoteVideo1 HAVE_ENOUGH_DATA', () => driver.executeScript(() => {
         return document.getElementById('remoteVideo1').readyState === HTMLMediaElement.HAVE_ENOUGH_DATA;
-      })),
-      driver.wait(() => driver.executeScript(() => {
+      }), 30000),
+      waitWithDiagnostics('remoteVideo2 HAVE_ENOUGH_DATA', () => driver.executeScript(() => {
         return document.getElementById('remoteVideo2').readyState === HTMLMediaElement.HAVE_ENOUGH_DATA;
-      })),
+      }), 30000),
     ]);
 
     await driver.findElement(webdriver.By.id('hangupButton')).click();
 
-    await driver.wait(() => driver.executeScript(() => {
+    await waitWithDiagnostics('peerPairs length 0', () => driver.executeScript(() => {
       return peerPairs.length === 0; // eslint-disable-line no-undef
-    }));
-    await driver.wait(() => driver.findElement(webdriver.By.id('videoCodecSelect')).isEnabled());
+    }), 30000);
+    await waitWithDiagnostics('videoCodecSelect enabled (post-hangup)', () => driver.findElement(webdriver.By.id('videoCodecSelect')).isEnabled(), 15000);
   }, 240000);
 });
