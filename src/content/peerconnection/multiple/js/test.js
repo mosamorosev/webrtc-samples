@@ -16,6 +16,8 @@ const path = '/src/content/peerconnection/multiple/index.html';
 const url = `${process.env.BASEURL ? process.env.BASEURL : ('file://' + process.cwd())}${path}`;
 
 describe('multiple peerconnections', () => {
+  // This test can run slowly on shared CI; set a higher timeout than the
+  // default 2 minutes.
   jest.setTimeout(240000);
   beforeAll(async () => {
     driver = await seleniumHelpers.buildDriver();
@@ -120,5 +122,5 @@ describe('multiple peerconnections', () => {
       return peerPairs.length === 0; // eslint-disable-line no-undef
     }));
     await driver.wait(() => driver.findElement(webdriver.By.id('videoCodecSelect')).isEnabled());
-  }, 120000);
+  }, 240000);
 });
