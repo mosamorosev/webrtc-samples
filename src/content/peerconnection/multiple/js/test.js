@@ -29,10 +29,43 @@ describe('multiple peerconnections', () => {
   beforeEach(() => {
     // webdriver.get() can occasionally return before navigation settles.
     // Retry until the expected URL is observed.
-    return driver.get(url).then(() => driver.wait(
-        () => driver.executeScript(() => location.pathname).then(p => p.endsWith(path)),
-        10000
-    ));
+    return driver.get(url)
+        .then(() => driver.wait(() =>
+          driver.executeScript(() => location.pathname).then(p => p.endsWith(path)),
+        10000))
+        .then(async () => {
+          // Some CI failures are caused by the page failing to execute scripts
+          // after navigation. Capture diagnostics early so we get logs even when
+          // the test later times out.
+          const loaded = await driver.executeScript(() => {
+            return typeof window.multiplePageLoaded !== 'undefined' &&
+              window.multiplePageLoaded === true;
+          }).catch(() => false);
+
+          if (loaded) {
+            return;
+          }
+
+          const diagnostics = await driver.executeScript(() => {
+            const startButtonPresent = !!document.getElementById('startButton');
+            return {
+              href: location.href,
+              pathname: location.pathname,
+              title: document.title,
+              readyState: document.readyState,
+              startButtonPresent,
+              multiplePageLoaded: window.multiplePageLoaded,
+              multiplePageLoadTs: window.multiplePageLoadTs,
+              errors: window.__multiplePageErrors || []
+            };
+          }).catch(e => ({
+            diagnosticsFailed: true,
+            message: e && (e.message || String(e))
+          }));
+
+          // eslint-disable-next-line no-console
+          console.error('multiple beforeEach diagnostics:', JSON.stringify(diagnostics));
+        });
   });
 
   // This test does real WebRTC negotiation and can be slow on shared CI machines.
