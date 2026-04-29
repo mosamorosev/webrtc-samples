@@ -15,6 +15,15 @@ let driver;
 const path = '/src/content/peerconnection/multiple/index.html';
 const url = `${process.env.BASEURL ? process.env.BASEURL : ('file://' + process.cwd())}${path}`;
 
+let lastMultipleDiagnostics;
+process.on('exit', () => {
+  if (!lastMultipleDiagnostics) {
+    return;
+  }
+  // eslint-disable-next-line no-console
+  console.error('MULTIPLE_DIAGNOSTICS_EXIT', JSON.stringify(lastMultipleDiagnostics));
+});
+
 describe('multiple peerconnections', () => {
   // This test can run slowly on shared CI; set a higher timeout than the
   // default 2 minutes.
@@ -118,6 +127,8 @@ describe('multiple peerconnections', () => {
         lastError: diagnostics && diagnostics.errors && diagnostics.errors.length ?
           diagnostics.errors[diagnostics.errors.length - 1] : null
       };
+
+      lastMultipleDiagnostics = shortDiagnostics;
       // eslint-disable-next-line no-console
       console.error('MULTIPLE_DIAGNOSTICS_LINE', JSON.stringify(shortDiagnostics));
       // Put the diagnostic payload into the failure assertion so Jest prints it
