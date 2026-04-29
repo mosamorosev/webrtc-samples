@@ -109,8 +109,17 @@ describe('multiple peerconnections', () => {
     const loaded = await sentinel();
     if (!loaded) {
       const diagnostics = await getDiagnostics();
+      // Keep a short line so it survives log truncation in CI.
+      const shortDiagnostics = {
+        readyState: diagnostics && diagnostics.readyState,
+        startButtonPresent: diagnostics && diagnostics.startButtonPresent,
+        multiplePageLoaded: diagnostics && diagnostics.multiplePageLoaded,
+        errorCount: diagnostics && diagnostics.errors ? diagnostics.errors.length : null,
+        lastError: diagnostics && diagnostics.errors && diagnostics.errors.length ?
+          diagnostics.errors[diagnostics.errors.length - 1] : null
+      };
       // eslint-disable-next-line no-console
-      console.error('MULTIPLE_DIAGNOSTICS_LINE', JSON.stringify(diagnostics));
+      console.error('MULTIPLE_DIAGNOSTICS_LINE', JSON.stringify(shortDiagnostics));
       throw new Error('Timed out waiting for window.multiplePageLoaded');
     }
     await driver.wait(webdriver.until.elementLocated(webdriver.By.id('startButton')));
