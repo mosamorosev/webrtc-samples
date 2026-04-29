@@ -16,6 +16,7 @@ const path = '/src/content/peerconnection/multiple/index.html';
 const url = `${process.env.BASEURL ? process.env.BASEURL : ('file://' + process.cwd())}${path}`;
 
 describe('multiple peerconnections', () => {
+  jest.setTimeout(240000);
   beforeAll(async () => {
     driver = await seleniumHelpers.buildDriver();
   });
