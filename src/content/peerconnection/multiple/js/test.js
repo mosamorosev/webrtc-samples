@@ -54,6 +54,8 @@ describe('multiple peerconnections', () => {
 
     const loaded = await sentinel();
     if (!loaded) {
+      // eslint-disable-next-line no-console
+      console.error('multiple page diagnostic marker');
       // Provide actionable diagnostics in CI logs when the page scripts
       // fail to execute in the webdriver environment.
       const diagnostics = await driver.executeScript(() => {
