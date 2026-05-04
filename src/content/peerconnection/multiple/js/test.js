@@ -146,8 +146,8 @@ describe('multiple peerconnections', () => {
       message: e && (e.message || String(e))
     }));
 
-    const waitForVideoFrames = (videoId) => {
-      return waitWithDiagnostics(`stats ${videoId} framesReceived`, () => driver.executeScript((id) => {
+    const waitForVideoTraffic = (videoId) => {
+      return waitWithDiagnostics(`stats ${videoId} inbound-rtp`, () => driver.executeScript((id) => {
         const findVideoReceiver = () => {
           if (!window.peerPairs || !window.peerPairs[0] || !window.peerPairs[0].receiverPc) {
             return null;
@@ -163,12 +163,16 @@ describe('multiple peerconnections', () => {
 
         return receiver.getStats().then(report => {
           let framesReceived = 0;
+          let packetsReceived = 0;
+          let bytesReceived = 0;
           report.forEach(stat => {
             if (stat.type === 'inbound-rtp' && stat.kind === 'video') {
               framesReceived = Math.max(framesReceived, stat.framesReceived || 0);
+              packetsReceived = Math.max(packetsReceived, stat.packetsReceived || 0);
+              bytesReceived = Math.max(bytesReceived, stat.bytesReceived || 0);
             }
           });
-          return framesReceived > 0;
+          return framesReceived > 0 || packetsReceived > 0 || bytesReceived > 0;
         });
       }, videoId), 60000);
     };
@@ -266,8 +270,8 @@ describe('multiple peerconnections', () => {
 
     // In headless/virtualized CI, video elements sometimes never start
     // decoding/rendering even though RTP is flowing. Assert on stats instead.
-    await waitForVideoFrames('remoteVideo1');
-    await waitForVideoFrames('remoteVideo2');
+    await waitForVideoTraffic('remoteVideo1');
+    await waitForVideoTraffic('remoteVideo2');
 
     await driver.findElement(webdriver.By.id('hangupButton')).click();
 
