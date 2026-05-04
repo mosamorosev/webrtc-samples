@@ -27,8 +27,8 @@ const video1 = document.querySelector('video#video1');
 let preferredVideoCodecMimeType;
 
 let localStream;
-// One shared sender PC encodes the local stream; each view has its own receiver PC.
-let senderPc;
+// Each view has its own independent sender/receiver PC pair.
+let senderPcs = [];
 let receiverPcs = [];
 // Backward-compatible global expected by selenium tests.
 // Keep a single entry that reflects the current topology.
@@ -183,40 +183,42 @@ async function call() {
   connectionStates = new Array(receiveVideoCount).fill('new');
   updateStatus();
 
-  senderPc = new RTCPeerConnection();
+  senderPcs = new Array(receiveVideoCount).fill(null).map(() => new RTCPeerConnection());
   receiverPcs = new Array(receiveVideoCount).fill(null).map(() => new RTCPeerConnection());
-  peerPairs = [{senderPc, receiverPc: receiverPcs[0]}];
+  peerPairs = senderPcs.map((senderPc, i) => ({senderPc, receiverPc: receiverPcs[i]}));
   window.peerPairs = peerPairs;
 
   const videoTrack = videoTracks[0];
   const audioTrack = audioTracks[0];
 
-  // Build N independent calls:
-  // - One shared senderPc holds N transceivers (one video + optional audio per view).
-  // - Each receiverPc negotiates with senderPc only for its own transceivers.
+  // Build N independent peer connection pairs
   for (let i = 0; i < receiveVideoCount; i++) {
+    const senderPc = senderPcs[i];
     const receiverPc = receiverPcs[i];
 
+    // Set up ICE candidate exchange for this pair
     senderPc.onicecandidate = e => {
-      if (!e.candidate) return;
-      receiverPcs.forEach((pc, idx) => {
-        pc.addIceCandidate(e.candidate).catch(err => {
-          console.warn(`receiverPc[${idx}].addIceCandidate failed`, err);
-        });
-      });
-    };
-    receiverPc.onicecandidate = e => {
       if (e.candidate) {
-        senderPc.addIceCandidate(e.candidate).catch(err => {
-          console.warn('senderPc.addIceCandidate failed', err);
+        receiverPc.addIceCandidate(e.candidate).catch(err => {
+          console.warn(`receiverPc[${i}].addIceCandidate failed`, err);
         });
       }
     };
+
+    receiverPc.onicecandidate = e => {
+      if (e.candidate) {
+        senderPc.addIceCandidate(e.candidate).catch(err => {
+          console.warn(`senderPc[${i}].addIceCandidate failed`, err);
+        });
+      }
+    };
+
     receiverPc.onconnectionstatechange = () => {
       connectionStates[i] = receiverPc.connectionState;
       updateStatus();
     };
 
+    // Add tracks to sender
     const stream = new MediaStream([videoTrack, audioTrack].filter(Boolean));
     const videoTransceiver = senderPc.addTransceiver(videoTrack, {
       direction: 'sendonly',
@@ -230,6 +232,7 @@ async function call() {
       });
     }
 
+    // Handle incoming track on receiver
     receiverPc.ontrack = e => {
       if (e.track.kind !== 'video') return;
       const incomingStream = e.streams[0] || new MediaStream([e.track]);
@@ -239,6 +242,7 @@ async function call() {
       }
     };
 
+    // Negotiate this peer connection pair
     const offer = await senderPc.createOffer();
     await senderPc.setLocalDescription(offer);
     await receiverPc.setRemoteDescription(offer);
@@ -269,10 +273,8 @@ function hangup() {
     clearInterval(statsUpdateInterval);
     statsUpdateInterval = null;
   }
-  if (senderPc) {
-    senderPc.close();
-    senderPc = null;
-  }
+  senderPcs.forEach(pc => pc.close());
+  senderPcs = [];
   receiverPcs.forEach(pc => pc.close());
   receiverPcs = [];
   peerPairs = [];
@@ -396,7 +398,7 @@ async function updateLocalVideoInfo() {
 
   const resolution = `${video.videoWidth}x${video.videoHeight}`;
 
-  if (!senderPc) {
+  if (senderPcs.length === 0) {
     infoDiv.textContent = `${resolution} | Not connected`;
     return;
   }
@@ -404,9 +406,9 @@ async function updateLocalVideoInfo() {
   let codec = 'Unknown';
   let encoderImpl = '';
 
-  // Get codec and encoder implementation from stats
+  // Get codec and encoder implementation from stats (use first sender PC)
   try {
-    const stats = await senderPc.getStats();
+    const stats = await senderPcs[0].getStats();
     stats.forEach(report => {
       if (report.type === 'outbound-rtp' && report.kind === 'video') {
         const codecId = report.codecId;
