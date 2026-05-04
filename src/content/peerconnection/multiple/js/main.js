@@ -12,6 +12,7 @@ const startButton = document.getElementById('startButton');
 const callButton = document.getElementById('callButton');
 const hangupButton = document.getElementById('hangupButton');
 const videoCountInput = document.getElementById('videoCountInput');
+const videoResolutionSelect = document.getElementById('videoResolutionSelect');
 const videoCodecSelect = document.getElementById('videoCodecSelect');
 const remoteVideosDiv = document.getElementById('remoteVideos');
 const statusDiv = document.getElementById('status');
@@ -135,9 +136,17 @@ function applyCodecPreferences(transceiver, displayIndex) {
 async function start() {
   console.log('Requesting local stream');
   startButton.disabled = true;
+
+  // Parse selected resolution
+  const resolution = videoResolutionSelect.value;
+  const [width, height] = resolution.split('x').map(Number);
+
   localStream = await navigator.mediaDevices.getUserMedia({
     audio: true,
-    video: true
+    video: {
+      width: {ideal: width},
+      height: {ideal: height}
+    }
   });
   video1.srcObject = localStream;
 
@@ -157,6 +166,7 @@ async function call() {
   callButton.disabled = true;
   hangupButton.disabled = false;
   videoCountInput.disabled = true;
+  videoResolutionSelect.disabled = true;
   videoCodecSelect.disabled = true;
   const receiveVideoCount = getRequestedVideoCount();
   console.log(`Setting up ${receiveVideoCount} receive video(s)`);
@@ -277,6 +287,7 @@ function hangup() {
   hangupButton.disabled = true;
   callButton.disabled = false;
   videoCountInput.disabled = false;
+  videoResolutionSelect.disabled = false;
   videoCodecSelect.disabled = false;
 }
 
