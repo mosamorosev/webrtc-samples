@@ -220,22 +220,39 @@ describe('multiple peerconnections', () => {
       return peerPairs[0].receiverPc.connectionState === 'connected'; // eslint-disable-line no-undef
     }), 30000);
 
-    await Promise.all([
-      waitWithDiagnostics('remoteVideo1 playing', () => driver.executeScript(() => {
-        const video = document.getElementById('remoteVideo1');
+    await driver.executeScript(() => {
+      const prepareVideo = (id) => {
+        const video = document.getElementById(id);
         if (!video) {
-          return false;
+          return;
         }
-        return video.currentTime > 0 && video.videoWidth > 0 && video.videoHeight > 0;
-      }), 60000),
-      waitWithDiagnostics('remoteVideo2 playing', () => driver.executeScript(() => {
-        const video = document.getElementById('remoteVideo2');
-        if (!video) {
-          return false;
+        video.muted = true;
+        video.playsInline = true;
+        const playPromise = video.play();
+        if (playPromise && typeof playPromise.catch === 'function') {
+          playPromise.catch(() => {});
         }
-        return video.currentTime > 0 && video.videoWidth > 0 && video.videoHeight > 0;
-      }), 60000),
-    ]);
+      };
+      prepareVideo('remoteVideo1');
+      prepareVideo('remoteVideo2');
+    }).catch(() => {});
+
+    // Wait sequentially so a timeout doesn't cause a second late log after the
+    // test has already failed.
+    await waitWithDiagnostics('remoteVideo1 playing', () => driver.executeScript(() => {
+      const video = document.getElementById('remoteVideo1');
+      if (!video) {
+        return false;
+      }
+      return video.currentTime > 0 && video.videoWidth > 0 && video.videoHeight > 0;
+    }), 60000);
+    await waitWithDiagnostics('remoteVideo2 playing', () => driver.executeScript(() => {
+      const video = document.getElementById('remoteVideo2');
+      if (!video) {
+        return false;
+      }
+      return video.currentTime > 0 && video.videoWidth > 0 && video.videoHeight > 0;
+    }), 60000);
 
     await driver.findElement(webdriver.By.id('hangupButton')).click();
 
