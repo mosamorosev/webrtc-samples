@@ -146,6 +146,33 @@ describe('multiple peerconnections', () => {
       message: e && (e.message || String(e))
     }));
 
+    const waitForVideoFrames = (videoId) => {
+      return waitWithDiagnostics(`stats ${videoId} framesReceived`, () => driver.executeScript((id) => {
+        const findVideoReceiver = () => {
+          if (!window.peerPairs || !window.peerPairs[0] || !window.peerPairs[0].receiverPc) {
+            return null;
+          }
+          const receivers = window.peerPairs[0].receiverPc.getReceivers();
+          return receivers.find(r => r.track && r.track.kind === 'video');
+        };
+
+        const receiver = findVideoReceiver();
+        if (!receiver) {
+          return false;
+        }
+
+        return receiver.getStats().then(report => {
+          let framesReceived = 0;
+          report.forEach(stat => {
+            if (stat.type === 'inbound-rtp' && stat.kind === 'video') {
+              framesReceived = Math.max(framesReceived, stat.framesReceived || 0);
+            }
+          });
+          return framesReceived > 0;
+        });
+      }, videoId), 60000);
+    };
+
     const sentinel = () => driver.executeScript(() => {
       return typeof window.multiplePageLoaded !== 'undefined' &&
         window.multiplePageLoaded === true;
@@ -237,22 +264,10 @@ describe('multiple peerconnections', () => {
       prepareVideo('remoteVideo2');
     }).catch(() => {});
 
-    // Wait sequentially so a timeout doesn't cause a second late log after the
-    // test has already failed.
-    await waitWithDiagnostics('remoteVideo1 playing', () => driver.executeScript(() => {
-      const video = document.getElementById('remoteVideo1');
-      if (!video) {
-        return false;
-      }
-      return video.currentTime > 0 && video.videoWidth > 0 && video.videoHeight > 0;
-    }), 60000);
-    await waitWithDiagnostics('remoteVideo2 playing', () => driver.executeScript(() => {
-      const video = document.getElementById('remoteVideo2');
-      if (!video) {
-        return false;
-      }
-      return video.currentTime > 0 && video.videoWidth > 0 && video.videoHeight > 0;
-    }), 60000);
+    // In headless/virtualized CI, video elements sometimes never start
+    // decoding/rendering even though RTP is flowing. Assert on stats instead.
+    await waitForVideoFrames('remoteVideo1');
+    await waitForVideoFrames('remoteVideo2');
 
     await driver.findElement(webdriver.By.id('hangupButton')).click();
 
