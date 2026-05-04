@@ -87,6 +87,30 @@ describe('multiple peerconnections', () => {
           throw e;
         }
         const diagnostics = await getDiagnostics();
+        const videoDetails = await driver.executeScript(() => {
+          const describeVideo = (id) => {
+            const video = document.getElementById(id);
+            if (!video) {
+              return {id, present: false};
+            }
+            return {
+              id,
+              present: true,
+              currentTime: video.currentTime,
+              paused: video.paused,
+              ended: video.ended,
+              readyState: video.readyState,
+              networkState: video.networkState,
+              videoWidth: video.videoWidth,
+              videoHeight: video.videoHeight,
+              hasSrcObject: !!video.srcObject,
+            };
+          };
+          return {
+            remoteVideo1: describeVideo('remoteVideo1'),
+            remoteVideo2: describeVideo('remoteVideo2'),
+          };
+        }).catch(() => null);
         const shortDiagnostics = {
           where: description,
           readyState: diagnostics && diagnostics.readyState,
@@ -94,7 +118,8 @@ describe('multiple peerconnections', () => {
           multiplePageLoaded: diagnostics && diagnostics.multiplePageLoaded,
           errorCount: diagnostics && diagnostics.errors ? diagnostics.errors.length : null,
           lastError: diagnostics && diagnostics.errors && diagnostics.errors.length ?
-            diagnostics.errors[diagnostics.errors.length - 1] : null
+            diagnostics.errors[diagnostics.errors.length - 1] : null,
+          videoDetails,
         };
         lastMultipleDiagnostics = shortDiagnostics;
         // Avoid console.error: Jest treats it as a test failure.
