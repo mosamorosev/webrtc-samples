@@ -87,30 +87,6 @@ describe('multiple peerconnections', () => {
           throw e;
         }
         const diagnostics = await getDiagnostics();
-        const videoDetails = await driver.executeScript(() => {
-          const describeVideo = (id) => {
-            const video = document.getElementById(id);
-            if (!video) {
-              return {id, present: false};
-            }
-            return {
-              id,
-              present: true,
-              currentTime: video.currentTime,
-              paused: video.paused,
-              ended: video.ended,
-              readyState: video.readyState,
-              networkState: video.networkState,
-              videoWidth: video.videoWidth,
-              videoHeight: video.videoHeight,
-              hasSrcObject: !!video.srcObject,
-            };
-          };
-          return {
-            remoteVideo1: describeVideo('remoteVideo1'),
-            remoteVideo2: describeVideo('remoteVideo2'),
-          };
-        }).catch(() => null);
         const shortDiagnostics = {
           where: description,
           readyState: diagnostics && diagnostics.readyState,
@@ -119,7 +95,6 @@ describe('multiple peerconnections', () => {
           errorCount: diagnostics && diagnostics.errors ? diagnostics.errors.length : null,
           lastError: diagnostics && diagnostics.errors && diagnostics.errors.length ?
             diagnostics.errors[diagnostics.errors.length - 1] : null,
-          videoDetails,
         };
         lastMultipleDiagnostics = shortDiagnostics;
         // Avoid console.error: Jest treats it as a test failure.
@@ -250,23 +225,6 @@ describe('multiple peerconnections', () => {
     await waitWithDiagnostics('receiverPc connected', () => driver.executeScript(() => {
       return peerPairs[0].receiverPc.connectionState === 'connected'; // eslint-disable-line no-undef
     }), 30000);
-
-    await driver.executeScript(() => {
-      const prepareVideo = (id) => {
-        const video = document.getElementById(id);
-        if (!video) {
-          return;
-        }
-        video.muted = true;
-        video.playsInline = true;
-        const playPromise = video.play();
-        if (playPromise && typeof playPromise.catch === 'function') {
-          playPromise.catch(() => {});
-        }
-      };
-      prepareVideo('remoteVideo1');
-      prepareVideo('remoteVideo2');
-    }).catch(() => {});
 
     // In headless/virtualized CI, video elements sometimes never start
     // decoding/rendering even though RTP is flowing. Assert on stats instead.
