@@ -196,11 +196,19 @@ describe('multiple peerconnections', () => {
     }), 30000);
 
     await Promise.all([
-      waitWithDiagnostics('remoteVideo1 HAVE_ENOUGH_DATA', () => driver.executeScript(() => {
-        return document.getElementById('remoteVideo1').readyState === HTMLMediaElement.HAVE_ENOUGH_DATA;
+      waitWithDiagnostics('remoteVideo1 playing', () => driver.executeScript(() => {
+        const video = document.getElementById('remoteVideo1');
+        if (!video) {
+          return false;
+        }
+        return video.currentTime > 0 && video.videoWidth > 0 && video.videoHeight > 0;
       }), 60000),
-      waitWithDiagnostics('remoteVideo2 HAVE_ENOUGH_DATA', () => driver.executeScript(() => {
-        return document.getElementById('remoteVideo2').readyState === HTMLMediaElement.HAVE_ENOUGH_DATA;
+      waitWithDiagnostics('remoteVideo2 playing', () => driver.executeScript(() => {
+        const video = document.getElementById('remoteVideo2');
+        if (!video) {
+          return false;
+        }
+        return video.currentTime > 0 && video.videoWidth > 0 && video.videoHeight > 0;
       }), 60000),
     ]);
 
