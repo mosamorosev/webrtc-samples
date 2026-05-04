@@ -51,8 +51,15 @@ async function buildDriver(browser = process.env.BROWSER || 'chrome', options = 
   const version = mapVersion(browser, options.version);
   const platform = puppeteerBrowsers.detectBrowserPlatform();
 
-  const buildId = await download(browser, version || 'stable',
-      cacheDir, platform);
+  // In CI we rely on the preinstalled stable browser to avoid
+  // flaky network downloads during test runs.
+  let buildId;
+  if (browser === 'chrome' && (version === 'stable' || !version)) {
+    buildId = undefined;
+  } else {
+    buildId = await download(browser, version || 'stable',
+        cacheDir, platform);
+  }
 
   // Chrome options.
   const chromeOptions = new chrome.Options()
@@ -64,6 +71,8 @@ async function buildDriver(browser = process.env.BROWSER || 'chrome', options = 
   }
   if (options.chromepath) {
     chromeOptions.setChromeBinaryPath(options.chromepath);
+  } else if (browser === 'chrome' && !buildId) {
+    // Use system chrome.
   } else {
     chromeOptions.setChromeBinaryPath(puppeteerBrowsers
         .computeExecutablePath({browser, buildId, cacheDir, platform}));
