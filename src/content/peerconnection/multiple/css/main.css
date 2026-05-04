@@ -25,18 +25,23 @@ video {
 }
 
 video#video1 {
-  margin: 0 20px 20px 0;
+  margin: 0;
 }
 
 div#remoteVideos {
   display: flex;
   flex-wrap: wrap;
+  gap: 20px;
 }
 
 .video-container {
   display: inline-flex;
   flex-direction: column;
-  margin: 0 20px 20px 0;
+  margin: 0;
+}
+
+#container > .video-container {
+  margin: 0 0 20px 0;
 }
 
 .video-container video {
@@ -45,12 +50,16 @@ div#remoteVideos {
 
 .video-info {
   font-size: 12px;
-  color: #666;
-  padding: 4px 0;
+  color: #333;
+  background: #f0f0f0;
+  padding: 6px 8px;
   text-align: center;
+  border-radius: 3px;
+  margin-top: 4px;
+  font-family: 'Courier New', monospace;
 }
 
-/* Codec label removed from UI to keep decoding views clean. */
+/* Video info labels show codec, resolution, and implementation details. */
 
 input#videoCountInput {
   width: 72px;

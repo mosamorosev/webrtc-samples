@@ -35,6 +35,7 @@ let receiverPcs = [];
 let peerPairs = [];
 let remoteVideos = [];
 let connectionStates = [];
+let statsUpdateInterval;
 
 const supportsSetCodecPreferences = window.RTCRtpTransceiver &&
   'setCodecPreferences' in window.RTCRtpTransceiver.prototype;
@@ -139,6 +140,15 @@ async function start() {
     video: true
   });
   video1.srcObject = localStream;
+
+  // Update local video info when metadata loads
+  video1.addEventListener('loadedmetadata', () => {
+    updateLocalVideoInfo();
+  });
+  video1.addEventListener('resize', () => {
+    updateLocalVideoInfo();
+  });
+
   callButton.disabled = false;
 }
 
@@ -229,11 +239,26 @@ async function call() {
   console.log('negotiation completed');
   window.callDone = true;
   updateStatus();
+
+  // Start updating stats periodically
+  if (statsUpdateInterval) {
+    clearInterval(statsUpdateInterval);
+  }
+  statsUpdateInterval = setInterval(() => {
+    updateLocalVideoInfo();
+    for (let i = 0; i < remoteVideos.length; i++) {
+      updateVideoInfo(i);
+    }
+  }, 1000);
 }
 
 function hangup() {
   console.log('Ending call');
   window.callDone = false;
+  if (statsUpdateInterval) {
+    clearInterval(statsUpdateInterval);
+    statsUpdateInterval = null;
+  }
   if (senderPc) {
     senderPc.close();
     senderPc = null;
@@ -245,6 +270,10 @@ function hangup() {
   resetRemoteVideos(0);
   connectionStates = [];
   statusDiv.textContent = '';
+  const localInfoDiv = document.getElementById('localVideoInfo');
+  if (localInfoDiv) {
+    localInfoDiv.textContent = 'Local video';
+  }
   hangupButton.disabled = true;
   callButton.disabled = false;
   videoCountInput.disabled = false;
@@ -309,8 +338,9 @@ async function updateVideoInfo(index) {
 
   const resolution = `${video.videoWidth}x${video.videoHeight}`;
   let codec = 'Unknown';
+  let decoderImpl = '';
 
-  // Try to get codec from stats
+  // Try to get codec and decoder implementation from stats
   const receiverPc = receiverPcs[index];
   if (receiverPc) {
     try {
@@ -318,6 +348,10 @@ async function updateVideoInfo(index) {
       stats.forEach(report => {
         if (report.type === 'inbound-rtp' && report.kind === 'video') {
           const codecId = report.codecId;
+          // Get decoder implementation
+          if (report.decoderImplementation) {
+            decoderImpl = report.decoderImplementation;
+          }
           if (codecId) {
             stats.forEach(codecReport => {
               if (codecReport.id === codecId && codecReport.type === 'codec') {
@@ -336,5 +370,60 @@ async function updateVideoInfo(index) {
     }
   }
 
-  infoDiv.textContent = `${resolution} | ${codec}`;
+  // Format: Resolution | Codec | Decoder Implementation
+  const parts = [resolution, codec];
+  if (decoderImpl) {
+    parts.push(decoderImpl);
+  }
+  infoDiv.textContent = parts.join(' | ');
+}
+
+async function updateLocalVideoInfo() {
+  const video = video1;
+  const infoDiv = document.getElementById('localVideoInfo');
+  if (!video || !infoDiv) return;
+
+  const resolution = `${video.videoWidth}x${video.videoHeight}`;
+
+  if (!senderPc) {
+    infoDiv.textContent = `${resolution} | Not connected`;
+    return;
+  }
+
+  let codec = 'Unknown';
+  let encoderImpl = '';
+
+  // Get codec and encoder implementation from stats
+  try {
+    const stats = await senderPc.getStats();
+    stats.forEach(report => {
+      if (report.type === 'outbound-rtp' && report.kind === 'video') {
+        const codecId = report.codecId;
+        // Get encoder implementation
+        if (report.encoderImplementation) {
+          encoderImpl = report.encoderImplementation;
+        }
+        if (codecId) {
+          stats.forEach(codecReport => {
+            if (codecReport.id === codecId && codecReport.type === 'codec') {
+              codec = codecReport.mimeType || 'Unknown';
+              // Extract just the codec name (e.g., "video/VP8" -> "VP8")
+              if (codec.includes('/')) {
+                codec = codec.split('/')[1];
+              }
+            }
+          });
+        }
+      }
+    });
+  } catch (err) {
+    console.warn('Failed to get stats for local video:', err);
+  }
+
+  // Format: Resolution | Codec | Encoder Implementation
+  const parts = [resolution, codec];
+  if (encoderImpl) {
+    parts.push(encoderImpl);
+  }
+  infoDiv.textContent = parts.join(' | ');
 }
