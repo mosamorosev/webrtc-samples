@@ -36,12 +36,26 @@
     <h1><a href="//webrtc.github.io/samples/" title="WebRTC samples homepage">WebRTC samples</a> <span>Multiple peer connections</span>
     </h1>
 
-    <video id="video1" playsinline autoplay muted></video>
+    <div class="video-container">
+        <video id="video1" playsinline autoplay muted></video>
+        <div class="video-info" id="localVideoInfo">Local video</div>
+    </div>
     <div id="remoteVideos"></div>
 
     <section>
         <label for="videoCountInput">Number of receive videos:</label>
         <input id="videoCountInput" type="number" inputmode="numeric" min="1" max="16" step="1" value="2">
+    </section>
+    <section>
+        <label for="videoResolutionSelect">Video resolution:</label>
+        <select id="videoResolutionSelect">
+            <option value="320x180">QVGA (320x180)</option>
+            <option value="640x480">VGA (640x480)</option>
+            <option value="640x360">SD (640x360)</option>
+            <option value="1280x720" selected>HD (1280x720)</option>
+            <option value="1920x1080">Full HD (1920x1080)</option>
+            <option value="2560x1440">QHD (2560x1440)</option>
+        </select>
     </section>
     <section>
         <label for="videoCodecSelect">Video codec:</label>
