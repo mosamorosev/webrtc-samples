@@ -273,6 +273,7 @@ function resetRemoteVideos(count) {
     video.id = `remoteVideo${i + 1}`;
     video.autoplay = true;
     video.playsInline = true;
+    video.muted = true;
 
     container.appendChild(video);
     remoteVideosDiv.appendChild(container);
