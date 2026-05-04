@@ -27,9 +27,9 @@ const video1 = document.querySelector('video#video1');
 let preferredVideoCodecMimeType;
 
 let localStream;
-// One shared sender PC encodes the local stream; each view has its own receiver PC.
+// One sender PC and one receiver PC handle all transceivers.
 let senderPc;
-let receiverPcs = [];
+let receiverPc;
 // Backward-compatible global expected by selenium tests.
 // Keep a single entry that reflects the current topology.
 // Exported for webdriver tests via window.peerPairs.
@@ -184,39 +184,41 @@ async function call() {
   updateStatus();
 
   senderPc = new RTCPeerConnection();
-  receiverPcs = new Array(receiveVideoCount).fill(null).map(() => new RTCPeerConnection());
-  peerPairs = [{senderPc, receiverPc: receiverPcs[0]}];
+  receiverPc = new RTCPeerConnection();
+  peerPairs = [{senderPc, receiverPc}];
   window.peerPairs = peerPairs;
 
   const videoTrack = videoTracks[0];
   const audioTrack = audioTracks[0];
 
-  // Build N independent calls:
-  // - One shared senderPc holds N transceivers (one video + optional audio per view).
-  // - Each receiverPc negotiates with senderPc only for its own transceivers.
-  for (let i = 0; i < receiveVideoCount; i++) {
-    const receiverPc = receiverPcs[i];
-
-    senderPc.onicecandidate = e => {
-      if (!e.candidate) return;
-      receiverPcs.forEach((pc, idx) => {
-        pc.addIceCandidate(e.candidate).catch(err => {
-          console.warn(`receiverPc[${idx}].addIceCandidate failed`, err);
-        });
+  // Set up ICE candidate exchange between the two PCs
+  senderPc.onicecandidate = e => {
+    if (e.candidate) {
+      receiverPc.addIceCandidate(e.candidate).catch(err => {
+        console.warn('receiverPc.addIceCandidate failed', err);
       });
-    };
-    receiverPc.onicecandidate = e => {
-      if (e.candidate) {
-        senderPc.addIceCandidate(e.candidate).catch(err => {
-          console.warn('senderPc.addIceCandidate failed', err);
-        });
-      }
-    };
-    receiverPc.onconnectionstatechange = () => {
-      connectionStates[i] = receiverPc.connectionState;
-      updateStatus();
-    };
+    }
+  };
 
+  receiverPc.onicecandidate = e => {
+    if (e.candidate) {
+      senderPc.addIceCandidate(e.candidate).catch(err => {
+        console.warn('senderPc.addIceCandidate failed', err);
+      });
+    }
+  };
+
+  receiverPc.onconnectionstatechange = () => {
+    // All receivers share the same connection state
+    const state = receiverPc.connectionState;
+    for (let i = 0; i < receiveVideoCount; i++) {
+      connectionStates[i] = state;
+    }
+    updateStatus();
+  };
+
+  // Build N transceivers on the sender PC (one video + optional audio per view)
+  for (let i = 0; i < receiveVideoCount; i++) {
     const stream = new MediaStream([videoTrack, audioTrack].filter(Boolean));
     const videoTransceiver = senderPc.addTransceiver(videoTrack, {
       direction: 'sendonly',
@@ -229,23 +231,31 @@ async function call() {
         streams: [stream]
       });
     }
+  }
 
-    receiverPc.ontrack = e => {
-      if (e.track.kind !== 'video') return;
-      const incomingStream = e.streams[0] || new MediaStream([e.track]);
+  // Handle incoming tracks on receiver - route each video to its corresponding element
+  let videoTrackIndex = 0;
+  receiverPc.ontrack = e => {
+    if (e.track.kind !== 'video') return;
+    const incomingStream = e.streams[0] || new MediaStream([e.track]);
+    if (videoTrackIndex < remoteVideos.length) {
+      const i = videoTrackIndex;
       if (remoteVideos[i] && remoteVideos[i].srcObject !== incomingStream) {
         remoteVideos[i].srcObject = incomingStream;
         console.log(`video${i + 1}: received remote stream`);
       }
-    };
+      videoTrackIndex++;
+    }
+  };
 
-    const offer = await senderPc.createOffer();
-    await senderPc.setLocalDescription(offer);
-    await receiverPc.setRemoteDescription(offer);
-    const answer = await receiverPc.createAnswer();
-    await receiverPc.setLocalDescription(answer);
-    await senderPc.setRemoteDescription(answer);
-  }
+  // Negotiate once after all transceivers are added
+  const offer = await senderPc.createOffer();
+  await senderPc.setLocalDescription(offer);
+  await receiverPc.setRemoteDescription(offer);
+  const answer = await receiverPc.createAnswer();
+  await receiverPc.setLocalDescription(answer);
+  await senderPc.setRemoteDescription(answer);
+
   console.log('negotiation completed');
   window.callDone = true;
   updateStatus();
@@ -273,8 +283,10 @@ function hangup() {
     senderPc.close();
     senderPc = null;
   }
-  receiverPcs.forEach(pc => pc.close());
-  receiverPcs = [];
+  if (receiverPc) {
+    receiverPc.close();
+    receiverPc = null;
+  }
   peerPairs = [];
   window.peerPairs = peerPairs;
   resetRemoteVideos(0);
@@ -352,7 +364,6 @@ async function updateVideoInfo(index) {
   let decoderImpl = '';
 
   // Try to get codec and decoder implementation from stats
-  const receiverPc = receiverPcs[index];
   if (receiverPc) {
     try {
       const stats = await receiverPc.getStats();
