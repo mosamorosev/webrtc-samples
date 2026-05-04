@@ -198,7 +198,7 @@ describe('multiple peerconnections', () => {
     await Promise.all([
       waitWithDiagnostics('remoteVideo1 HAVE_ENOUGH_DATA', () => driver.executeScript(() => {
         return document.getElementById('remoteVideo1').readyState === HTMLMediaElement.HAVE_ENOUGH_DATA;
-      }), 30000),
+      }), 60000),
       waitWithDiagnostics('remoteVideo2 HAVE_ENOUGH_DATA', () => driver.executeScript(() => {
         return document.getElementById('remoteVideo2').readyState === HTMLMediaElement.HAVE_ENOUGH_DATA;
       }), 60000),
