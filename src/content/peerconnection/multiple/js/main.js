@@ -275,13 +275,66 @@ function resetRemoteVideos(count) {
     video.playsInline = true;
     video.muted = true;
 
+    const info = document.createElement('div');
+    info.className = 'video-info';
+    info.id = `videoInfo${i + 1}`;
+    info.textContent = 'Loading...';
+
     container.appendChild(video);
+    container.appendChild(info);
     remoteVideosDiv.appendChild(container);
 
     remoteVideos.push(video);
+
+    // Update resolution when video metadata loads
+    video.addEventListener('loadedmetadata', () => {
+      updateVideoInfo(i);
+    });
+
+    // Also update on resize in case resolution changes
+    video.addEventListener('resize', () => {
+      updateVideoInfo(i);
+    });
   }
 }
 
 function updateStatus() {
   statusDiv.textContent = connectionStates.map((state, i) => `#${i + 1}:${state}`).join(' ');
+}
+
+async function updateVideoInfo(index) {
+  const video = remoteVideos[index];
+  const infoDiv = document.getElementById(`videoInfo${index + 1}`);
+  if (!video || !infoDiv) return;
+
+  const resolution = `${video.videoWidth}x${video.videoHeight}`;
+  let codec = 'Unknown';
+
+  // Try to get codec from stats
+  const receiverPc = receiverPcs[index];
+  if (receiverPc) {
+    try {
+      const stats = await receiverPc.getStats();
+      stats.forEach(report => {
+        if (report.type === 'inbound-rtp' && report.kind === 'video') {
+          const codecId = report.codecId;
+          if (codecId) {
+            stats.forEach(codecReport => {
+              if (codecReport.id === codecId && codecReport.type === 'codec') {
+                codec = codecReport.mimeType || 'Unknown';
+                // Extract just the codec name (e.g., "video/VP8" -> "VP8")
+                if (codec.includes('/')) {
+                  codec = codec.split('/')[1];
+                }
+              }
+            });
+          }
+        }
+      });
+    } catch (err) {
+      console.warn(`Failed to get stats for video ${index + 1}:`, err);
+    }
+  }
+
+  infoDiv.textContent = `${resolution} | ${codec}`;
 }
