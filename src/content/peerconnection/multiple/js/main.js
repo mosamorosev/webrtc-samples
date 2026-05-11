@@ -362,17 +362,39 @@ async function updateVideoInfo(index) {
   const resolution = `${video.videoWidth}x${video.videoHeight}`;
   let codec = 'Unknown';
   let decoderImpl = '';
+  let powerEfficient = '';
 
   // Try to get codec and decoder implementation from stats
   if (receiverPc) {
     try {
       const stats = await receiverPc.getStats();
-      stats.forEach(report => {
-        if (report.type === 'inbound-rtp' && report.kind === 'video') {
-          const codecId = report.codecId;
+      const receivers = receiverPc.getReceivers();
+
+      // Match the receiver at the given index to find its specific stats
+      if (receivers[index]) {
+        const targetReceiver = receivers[index];
+        let targetReport = null;
+
+        // Find the inbound-rtp report for this specific receiver
+        stats.forEach(report => {
+          if (report.type === 'inbound-rtp' && report.kind === 'video') {
+            // Match by checking if this report's track matches our receiver's track
+            if (targetReceiver.track && report.trackIdentifier === targetReceiver.track.id) {
+              targetReport = report;
+            }
+          }
+        });
+
+        // If we found the specific report, extract its data
+        if (targetReport) {
+          const codecId = targetReport.codecId;
           // Get decoder implementation
-          if (report.decoderImplementation) {
-            decoderImpl = report.decoderImplementation;
+          if (targetReport.decoderImplementation) {
+            decoderImpl = targetReport.decoderImplementation;
+          }
+          // Get power efficiency status
+          if (targetReport.powerEfficientDecoder !== undefined) {
+            powerEfficient = targetReport.powerEfficientDecoder ? 'HW' : 'SW';
           }
           if (codecId) {
             stats.forEach(codecReport => {
@@ -386,16 +408,19 @@ async function updateVideoInfo(index) {
             });
           }
         }
-      });
+      }
     } catch (err) {
       console.warn(`Failed to get stats for video ${index + 1}:`, err);
     }
   }
 
-  // Format: Resolution | Codec | Decoder Implementation
+  // Format: Resolution | Codec | Decoder Implementation | HW/SW
   const parts = [resolution, codec];
   if (decoderImpl) {
     parts.push(decoderImpl);
+  }
+  if (powerEfficient) {
+    parts.push(powerEfficient);
   }
   infoDiv.textContent = parts.join(' | ');
 }
@@ -414,6 +439,7 @@ async function updateLocalVideoInfo() {
 
   let codec = 'Unknown';
   let encoderImpl = '';
+  let powerEfficient = '';
 
   // Get codec and encoder implementation from stats
   try {
@@ -424,6 +450,10 @@ async function updateLocalVideoInfo() {
         // Get encoder implementation
         if (report.encoderImplementation) {
           encoderImpl = report.encoderImplementation;
+        }
+        // Get power efficiency status
+        if (report.powerEfficientEncoder !== undefined) {
+          powerEfficient = report.powerEfficientEncoder ? 'HW' : 'SW';
         }
         if (codecId) {
           stats.forEach(codecReport => {
@@ -442,10 +472,13 @@ async function updateLocalVideoInfo() {
     console.warn('Failed to get stats for local video:', err);
   }
 
-  // Format: Resolution | Codec | Encoder Implementation
+  // Format: Resolution | Codec | Encoder Implementation | HW/SW
   const parts = [resolution, codec];
   if (encoderImpl) {
     parts.push(encoderImpl);
+  }
+  if (powerEfficient) {
+    parts.push(powerEfficient);
   }
   infoDiv.textContent = parts.join(' | ');
 }
