@@ -205,8 +205,8 @@ async function onCreateAnswerSuccess(desc) {
         document.getElementById('actualCodec').innerText = 'Using ' + codec.mimeType +
             (codec.sdpFmtpLine ? ' ' + codec.sdpFmtpLine + ' ' : '') +
             ', payloadType=' + codec.payloadType + '.';
-        // Filter out invalid/placeholder encoder implementation names
-        if (stat.encoderImplementation && stat.encoderImplementation !== 'Unknown' && stat.encoderImplementation !== 'NullEncoder') {
+        // Show encoder implementation name if available
+        if (stat.encoderImplementation) {
           document.getElementById('actualCodec').innerText += ' Encoder: "' + stat.encoderImplementation + '".';
         }
         if (stat.powerEfficientEncoder !== undefined) {
