@@ -369,10 +369,12 @@ async function updateVideoInfo(index) {
     try {
       const stats = await receiverPc.getStats();
       const receivers = receiverPc.getReceivers();
+      // Filter to only video receivers since audio receivers are also present
+      const videoReceivers = receivers.filter(r => r.track && r.track.kind === 'video');
 
       // Match the receiver at the given index to find its specific stats
-      if (receivers[index]) {
-        const targetReceiver = receivers[index];
+      if (videoReceivers[index]) {
+        const targetReceiver = videoReceivers[index];
         let targetReport = null;
 
         // Find the inbound-rtp report for this specific receiver
