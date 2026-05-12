@@ -205,6 +205,7 @@ async function onCreateAnswerSuccess(desc) {
         document.getElementById('actualCodec').innerText = 'Using ' + codec.mimeType +
             (codec.sdpFmtpLine ? ' ' + codec.sdpFmtpLine + ' ' : '') +
             ', payloadType=' + codec.payloadType + '.';
+        // Show encoder implementation name if available
         if (stat.encoderImplementation) {
           document.getElementById('actualCodec').innerText += ' Encoder: "' + stat.encoderImplementation + '".';
         }
