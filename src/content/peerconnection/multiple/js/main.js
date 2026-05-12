@@ -416,7 +416,8 @@ async function updateVideoInfo(index) {
 
   // Format: Resolution | Codec | Decoder Implementation | HW/SW
   const parts = [resolution, codec];
-  if (decoderImpl) {
+  // Filter out invalid/placeholder decoder implementation names
+  if (decoderImpl && decoderImpl !== 'Unknown' && decoderImpl !== 'NullDecoder') {
     parts.push(decoderImpl);
   }
   if (powerEfficient) {
@@ -474,7 +475,8 @@ async function updateLocalVideoInfo() {
 
   // Format: Resolution | Codec | Encoder Implementation | HW/SW
   const parts = [resolution, codec];
-  if (encoderImpl) {
+  // Filter out invalid/placeholder encoder implementation names
+  if (encoderImpl && encoderImpl !== 'Unknown' && encoderImpl !== 'NullEncoder') {
     parts.push(encoderImpl);
   }
   if (powerEfficient) {
