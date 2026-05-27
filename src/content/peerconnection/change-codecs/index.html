@@ -50,7 +50,15 @@
     </div>
 
     <div class="box">
-        <span>Codec preferences:</span>
+        <label for="captureSource">Capture source:</label>
+        <select id="captureSource">
+            <option selected value="camera">Camera</option>
+            <option value="screen">Screen</option>
+        </select>
+    </div>
+
+    <div class="box">
+        <label for="codecPreferences">Codec preferences:</label>
         <select id="codecPreferences" disabled>
             <option selected value="">Default</option>
         </select>

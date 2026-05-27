@@ -11,6 +11,7 @@
 const startButton = document.getElementById('startButton');
 const callButton = document.getElementById('callButton');
 const hangupButton = document.getElementById('hangupButton');
+const captureSource = document.getElementById('captureSource');
 callButton.disabled = true;
 hangupButton.disabled = true;
 startButton.addEventListener('click', start);
@@ -48,6 +49,10 @@ let localStream;
 let pc1;
 let pc2;
 
+const kScreenShareMaxWidth = 1920;
+const kScreenShareMaxHeight = 1080;
+const kScreenShareMaxFps = 30;
+
 function getName(pc) {
   return (pc === pc1) ? 'pc1' : 'pc2';
 }
@@ -57,19 +62,66 @@ function getOtherPc(pc) {
 }
 
 async function start() {
-  console.log('Requesting local stream');
+  console.log(`Requesting local stream from ${captureSource.value}`);
   startButton.disabled = true;
+  // Release any previous local capture before creating a new one.
+  if (localStream) {
+    localStream.getTracks().forEach(track => track.stop());
+    localStream = null;
+    localVideo.srcObject = null;
+  }
+  codecPreferences.disabled = true;
+  codecPreferences.options.length = 1;  // Keep "Default" option.
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({video: true});
+    const stream = captureSource.value === 'screen' ?
+        await navigator.mediaDevices.getDisplayMedia({
+          video: {
+            width: {max: kScreenShareMaxWidth},
+            height: {max: kScreenShareMaxHeight},
+            frameRate: {max: kScreenShareMaxFps},
+          },
+          audio: false,
+        }) :
+        await navigator.mediaDevices.getUserMedia({video: true});
+
+    // Re-apply constraints on the display track to ensure a MFVEA-friendly
+    // capture format even when chooser defaults to native monitor size.
+    if (captureSource.value === 'screen') {
+      const [screenTrack] = stream.getVideoTracks();
+      if (screenTrack) {
+        try {
+          await screenTrack.applyConstraints({
+            width: {max: kScreenShareMaxWidth},
+            height: {max: kScreenShareMaxHeight},
+            frameRate: {max: kScreenShareMaxFps},
+          });
+          const settings = screenTrack.getSettings();
+          console.log(
+              `Screen capture constrained to ${settings.width || 'unknown'}x${
+                  settings.height ||
+                  'unknown'} @ ${settings.frameRate || 'unknown'} fps`);
+        } catch (applyError) {
+          console.warn(
+              `Failed to apply screen constraints: ${applyError.name}`);
+        }
+      }
+    }
+
     console.log('Received local stream');
     localVideo.srcObject = stream;
     localStream = stream;
     callButton.disabled = false;
+    captureSource.disabled = true;
   } catch (e) {
-    alert(`getUserMedia() error: ${e.name}`);
+    startButton.disabled = false;
+    const apiName =
+        captureSource.value === 'screen' ? 'getDisplayMedia' : 'getUserMedia';
+    alert(`${apiName}() error: ${e.name}`);
+    return;
   }
   if (supportsSetCodecPreferences) {
     const {codecs} = RTCRtpReceiver.getCapabilities('video');
+    let h264Option = null;
     codecs.forEach(codec => {
       if (['video/red', 'video/ulpfec', 'video/rtx', 'video/flexfec-03'].includes(codec.mimeType)) {
         return;
@@ -78,7 +130,14 @@ async function start() {
       option.value = (codec.mimeType + ' ' + (codec.sdpFmtpLine || '')).trim();
       option.innerText = option.value;
       codecPreferences.appendChild(option);
+      if (!h264Option && codec.mimeType.toLowerCase() === 'video/h264') {
+        h264Option = option;
+      }
     });
+    if (h264Option) {
+      h264Option.selected = true;
+      console.log('Defaulting preferred codec to H.264');
+    }
     codecPreferences.disabled = false;
   }
 }
@@ -243,7 +302,15 @@ function hangup() {
   pc2.close();
   pc1 = null;
   pc2 = null;
+  if (localStream) {
+    localStream.getTracks().forEach(track => track.stop());
+    localStream = null;
+  }
+  localVideo.srcObject = null;
+  remoteVideo.srcObject = null;
+  startButton.disabled = false;
   hangupButton.disabled = true;
-  callButton.disabled = false;
-  codecPreferences.disabled = false;
+  callButton.disabled = true;
+  codecPreferences.disabled = true;
+  captureSource.disabled = false;
 }
